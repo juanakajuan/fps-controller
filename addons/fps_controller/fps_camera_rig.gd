@@ -7,6 +7,9 @@ const REFERENCE_ASPECT: float = 16.0 / 9.0
 var body: FPSController
 var camera: Camera3D = Camera3D.new()
 
+var _previous_origin: Vector3 = Vector3.ZERO
+var _current_origin: Vector3 = Vector3.ZERO
+var _pending_step: float = 0.0
 var _eye_height: float = 0.0
 var _step_offset: float = 0.0
 var _roll: float = 0.0
@@ -33,6 +36,9 @@ func _ready() -> void:
 
 ## Puts every smoothed value on its target and places the camera now.
 func snap() -> void:
+	_previous_origin = body.global_position
+	_current_origin = body.global_position
+	_pending_step = 0.0
 	_eye_height = _target_eye_height()
 	_step_offset = 0.0
 	_roll = 0.0
@@ -45,7 +51,16 @@ func snap() -> void:
 
 ## Keeps the camera at its old height after the body moves up or down by height. The offset then decays to zero.
 func add_step(height: float) -> void:
-	_step_offset -= height
+	_pending_step += height
+
+
+## Called by the body at the end of each physics tick.
+## The step also goes into the previous origin, so the lerp does not spread it over the tick. Only the offset decay smooths it.
+func record_tick() -> void:
+	_previous_origin = _current_origin + Vector3(0.0, _pending_step, 0.0)
+	_current_origin = body.global_position
+	_step_offset -= _pending_step
+	_pending_step = 0.0
 
 
 func _process(delta: float) -> void:
@@ -63,7 +78,8 @@ func _process(delta: float) -> void:
 	_bob_phase = fmod(_bob_phase + TAU * tuning.head_bob_frequency * speed / tuning.walk_speed * delta, TAU)
 	var bob: Vector3 = Vector3(sin(_bob_phase) * 0.5, sin(_bob_phase * 2.0), 0.0) * tuning.head_bob_amplitude * _bob_weight
 	_step_dip(tuning.landing_dip_frequency, delta)
-	_place(body.get_global_transform_interpolated().origin, bob + Vector3(0.0, _dip, 0.0))
+	var origin: Vector3 = _previous_origin.lerp(_current_origin, Engine.get_physics_interpolation_fraction())
+	_place(origin, bob + Vector3(0.0, _dip, 0.0))
 
 
 func _place(origin: Vector3, offset: Vector3) -> void:

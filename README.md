@@ -241,7 +241,9 @@ On a bunny hop, the controller emits `landed` and then `jumped` on the same tick
 
 ## Physics interpolation
 
-The body moves at the physics tick rate, which is 60 Hz by default. The camera rig reads `get_global_transform_interpolated()` from the body on each rendered frame. The camera then moves smoothly on a screen that is faster than 60 Hz.
+The body moves at the physics tick rate, which is 60 Hz by default. At the end of each tick, the body sends its position to the camera rig. On each rendered frame, the rig interpolates between the last two positions with `Engine.get_physics_interpolation_fraction()`. The camera then moves smoothly on a screen that is faster than 60 Hz.
+
+When the body climbs or drops a step, the rig does not interpolate the height change. The camera stays at its old height and then moves smoothly to the new height at the `step_smoothing` rate. Thus a step up does not move the camera down.
 
 The smooth camera needs physics interpolation. If physics interpolation is off, the camera moves only at the physics tick rate. The controller then pushes one warning when it enters the tree.
 

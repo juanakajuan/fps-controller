@@ -46,6 +46,7 @@ func run() -> void:
 	await test_slope_slide()
 	await test_landed_signal()
 	await test_camera_rig()
+	await test_camera_on_stairs()
 	await test_player_input()
 	print("RESULT: %d checks, %d failures" % [checks, failures])
 	quit(1 if failures > 0 else 0)
@@ -530,6 +531,38 @@ func test_camera_rig() -> void:
 	await frames(60)
 	offset = player.camera.global_position - player.global_position
 	check(absf(offset.y - 1.0) < 0.05, "Crouching lowers the camera to 1.0 m eye height")
+	await finish(level)
+
+
+func test_camera_on_stairs() -> void:
+	var level: Node3D = make_level()
+	add_staircase(level, 0.0, 0.3, 0.6, 20)
+	var values: FPSSettings = tuning()
+	# The head bob moves the camera down on purpose, so it is off to isolate the step.
+	values.head_bob_enabled = false
+	var player: FPSController = spawn(level, values, Vector3.ZERO, 0.0)
+	await frames(5)
+	var previous_max_fps: int = Engine.max_fps
+	Engine.max_fps = 240
+	player.intent.move = Vector2(0.0, 1.0)
+	var start_tick: int = Engine.get_physics_frames()
+	var last_y: float = player.camera.global_position.y
+	var worst_drop: float = 0.0
+	var samples: int = 0
+	while player.global_position.z > -16.5 and Engine.get_physics_frames() - start_tick < 240:
+		await process_frame
+		var y: float = player.camera.global_position.y
+		worst_drop = maxf(worst_drop, last_y - y)
+		last_y = y
+		samples += 1
+	var ticks: int = Engine.get_physics_frames() - start_tick
+	Engine.max_fps = previous_max_fps
+	measure("rendered frames while climbing twenty 0.3 m steps", samples, "frames")
+	measure("physics ticks while climbing twenty 0.3 m steps", ticks, "ticks")
+	measure("worst camera drop in one frame while climbing", worst_drop, "m")
+	check(absf(player.global_position.y - 6.0) < 0.02, "Walking up twenty 0.3 m steps with 0.6 m treads reaches the 6.0 m top")
+	check(samples > ticks, "At a 240 FPS cap more frames render than physics ticks run, so frames fall between ticks")
+	check(worst_drop <= 0.01, "While the body climbs, no rendered frame moves the camera down by more than 0.01 m")
 	await finish(level)
 
 

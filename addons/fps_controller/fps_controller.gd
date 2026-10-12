@@ -121,6 +121,7 @@ func _physics_process(delta: float) -> void:
 			_move_air(delta)
 		MoveState.SLIDE:
 			_move_slide(delta)
+	_rig.record_tick()
 
 
 func look(delta_yaw: float, delta_pitch: float) -> void:
