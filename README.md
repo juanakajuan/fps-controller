@@ -12,7 +12,6 @@ The addon has three scripts:
 
 1. Copy the `addons/fps_controller/` folder into your project.
 2. Open the project in Godot 4.7.
-3. Make sure that **Project Settings > Physics > Common > Physics Interpolation** is on.
 
 You do not need to enable a plugin. Godot registers the class names when it scans the project.
 
@@ -245,7 +244,7 @@ The body moves at the physics tick rate, which is 60 Hz by default. At the end o
 
 When the body climbs or drops a step, the rig does not interpolate the height change. The camera stays at its old height and then moves smoothly to the new height at the `step_smoothing` rate. Thus a step up does not move the camera down.
 
-The smooth camera needs physics interpolation. If physics interpolation is off, the camera moves only at the physics tick rate. The controller then pushes one warning when it enters the tree.
+The camera does not need the **Project Settings > Physics > Common > Physics Interpolation** setting. The camera moves smoothly when this setting is on and when it is off. Other moving bodies in your game, for example enemies and doors, still need this setting for smooth motion.
 
 Mouse look changes `yaw` and `pitch` in `_unhandled_input`. Gamepad look changes them in `_process`. The rig reads them on the same frame, so look has no tick delay.
 

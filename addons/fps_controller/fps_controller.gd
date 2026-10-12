@@ -55,8 +55,6 @@ var _on_floor: bool = false
 func _ready() -> void:
 	if settings == null:
 		settings = FPSSettings.new()
-	if not get_tree().physics_interpolation:
-		push_warning("FPSController: physics interpolation is off, so the camera moves at the physics tick rate. Turn on physics/common/physics_interpolation.")
 	floor_max_angle = deg_to_rad(settings.floor_max_angle_degrees)
 	floor_constant_speed = true
 	floor_snap_length = settings.step_height
