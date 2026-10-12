@@ -313,8 +313,9 @@ If you do not give a path, the file is `user://visual_smoke.png`.
 These checks passed with Godot 4.7.2 on Linux on 2026-10-12:
 
 - `bash tests/run_checks.sh` passed. The editor import and the parse of all six scripts gave no errors and no warnings.
-- The test suite passed on Jolt Physics with 58 checks and 0 failures.
-- The test suite passed on Godot Physics with 58 checks and 0 failures.
+- The test suite passed on Jolt Physics with 62 checks and 0 failures.
+- The test suite passed on Godot Physics with 62 checks and 0 failures.
+- The test suite passed again on Jolt Physics and on Godot Physics with physics interpolation off, with 62 checks and 0 failures on each. A temporary `override.cfg` file set `common/physics_interpolation=false` in the `[physics]` section.
 - The demo launch for 180 frames gave no errors and no warnings.
 - The visual smoke test passed with Vulkan Forward+ at 1600x900. The luminance spread of the frame was 1.0. A frame of one color gives 0.0.
 
@@ -329,11 +330,13 @@ The test suite measured these values with the default settings:
 | Jump height with jump released after 0.05 s | 0.584 m | 0.583 m |
 | Air speed from a standing jump with forward held | 3.0 m/s | 3.0 m/s |
 | Speed after 25 ticks of air strafing from 10.5 m/s | 11.83 m/s | 11.83 m/s |
-| Speed on the first slide tick from sprint | 13.77 m/s | 13.77 m/s |
-| Slide time on flat floor until the slide stops | 1.25 s | 1.25 s |
+| Speed on the first slide tick from sprint | 13.89 m/s | 13.89 m/s |
+| Slide time on flat floor until the slide stops | 1.55 s | 1.55 s |
 | Average speed across a 0.3 m step at walk speed | 7.06 m/s | 7.06 m/s |
-| Slide speed after 0.5 s on flat floor | 8.46 m/s | 8.46 m/s |
-| Slide speed after 0.5 s down a 20 degree ramp | 11.76 m/s | 11.76 m/s |
+| Slide speed 0.5 s after entry on flat floor | 10.64 m/s | 10.64 m/s |
+| Slide speed at entry on a 20 degree ramp | 14.03 m/s | 14.03 m/s |
+| Slide speed 0.5 s after entry down a 20 degree ramp | 14.96 m/s | 14.96 m/s |
 | Impact speed after a 2 m drop | 11.26 m/s | 11.26 m/s |
 | Vertical FOV when you stand still | 58.72 degrees | 58.72 degrees |
 | Vertical FOV at sprint speed | 63.31 degrees | 63.31 degrees |
+| Largest downward camera move in one frame up twenty 0.3 m steps at 240 FPS | 0.000 m | 0.000 m |
