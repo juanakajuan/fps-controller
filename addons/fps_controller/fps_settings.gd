@@ -35,7 +35,7 @@ extends Resource
 @export_range(0.0, 50.0, 0.1, "suffix:m/s") var slide_min_speed: float = 8.0
 @export_range(0.0, 20.0, 0.1, "suffix:m/s") var slide_boost: float = 3.5
 @export_range(0.0, 50.0, 0.1, "suffix:m/s") var slide_max_speed: float = 15.0
-@export_range(0.0, 20.0, 0.05) var slide_friction: float = 1.0
+@export_range(0.0, 50.0, 0.1, "suffix:m/s²") var slide_deceleration: float = 6.5
 @export_range(0.0, 50.0, 0.1, "suffix:m/s") var slide_exit_speed: float = 4.0
 @export_range(0.0, 5.0, 0.05, "suffix:s") var slide_cooldown: float = 0.6
 @export_range(0.0, 100.0, 0.1, "suffix:m/s²") var slide_steer_acceleration: float = 8.0

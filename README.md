@@ -123,7 +123,7 @@ Each value has a range in the inspector. Change the **Body** values before the n
 | `crouch_speed` | 3.5 | m/s | Speed when you crouch |
 | `ground_acceleration` | 12 | 1/s | How fast the body gets to the target speed |
 | `ground_friction` | 8 | 1/s | How fast the body slows down |
-| `stop_speed` | 3.0 | m/s | Below this speed, friction removes the same amount on each tick, so the body comes to a stop |
+| `stop_speed` | 3.0 | m/s | Below this speed, ground friction removes the same amount on each tick, so the body comes to a stop |
 
 ### Jump
 
@@ -155,12 +155,12 @@ The air has no friction. Air input adds speed only along the input direction, up
 | `slide_min_speed` | 8.0 | m/s | Lowest speed that starts a slide. It is more than the walk speed, so you must sprint. |
 | `slide_boost` | 3.5 | m/s | Speed added when a slide starts |
 | `slide_max_speed` | 15 | m/s | Highest speed from the boost and from slopes |
-| `slide_friction` | 1.0 | 1/s | How fast a slide slows down |
+| `slide_deceleration` | 6.5 | m/s² | Speed that a slide loses each second. The loss does not change with speed. |
 | `slide_exit_speed` | 4.0 | m/s | The slide stops below this speed |
 | `slide_cooldown` | 0.6 | s | Time before a new slide can start |
 | `slide_steer_acceleration` | 8 | m/s² | How fast input turns a slide. Steering does not add speed. |
 
-Gravity along the floor makes a slide faster down a slope and slower up a slope.
+Gravity along the floor adds speed to a slide down a slope and removes speed from a slide up a slope. Down a slope that is steeper than about 15.5 degrees, gravity adds more speed than `slide_deceleration` removes, so the slide gets faster. On flat floor, a slide that starts at 14 m/s stops after about 1.5 s.
 
 ### Camera
 

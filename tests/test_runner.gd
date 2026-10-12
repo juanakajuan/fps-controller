@@ -79,7 +79,7 @@ func tuning() -> FPSSettings:
 	values.slide_min_speed = 8.0
 	values.slide_boost = 3.5
 	values.slide_max_speed = 15.0
-	values.slide_friction = 1.0
+	values.slide_deceleration = 6.5
 	values.slide_exit_speed = 4.0
 	values.slide_cooldown = 0.6
 	values.slide_steer_acceleration = 8.0
@@ -333,7 +333,7 @@ func test_sprint_and_slide() -> void:
 	check(peak >= 13.5 and peak <= 14.0, "Slide boost lifts 10.5 m/s to between 13.5 and 14.0 m/s")
 	var slide_ticks: int = await wait_for_state(player, FPSController.MoveState.GROUND, 240)
 	measure("flat slide duration", slide_ticks * TICK, "s")
-	check(slide_ticks > 30, "Slide lasts more than 0.5 s on flat ground")
+	check(slide_ticks * TICK >= 1.5 and slide_ticks * TICK <= 1.6, "A flat slide from 13.89 m/s lasts between 1.5 s and 1.6 s before it drops below 4.0 m/s")
 	check(player.horizontal_speed() < 4.0, "Slide ends when speed drops below 4.0 m/s")
 	check(transitions == ["GROUND>SLIDE", "SLIDE>GROUND"], "move_state_changed reports GROUND>SLIDE then SLIDE>GROUND")
 	check(player.stance == FPSController.Stance.CROUCH, "Body stays crouched after the slide while crouch is held")
@@ -468,30 +468,41 @@ func test_ceiling() -> void:
 	await finish(level)
 
 
-func slide_speed_after(level: Node3D, at: Vector3, facing: float) -> float:
+func start_slide(level: Node3D, at: Vector3, facing: float) -> FPSController:
 	var player: FPSController = spawn(level, tuning(), at, facing)
 	await frames(5)
 	player.intent.move = Vector2(0.0, 1.0)
 	player.intent.sprint_held = true
 	await frames(30)
 	player.intent.crouch_held = true
-	await frames(30)
-	return player.horizontal_speed() if player.move_state == FPSController.MoveState.SLIDE else 0.0
+	await frames(1)
+	return player
 
 
 func test_slope_slide() -> void:
 	var flat: Node3D = make_level()
-	var flat_speed: float = await slide_speed_after(flat, Vector3.ZERO, 0.0)
+	var flat_player: FPSController = await start_slide(flat, Vector3.ZERO, 0.0)
+	var flat_entry: float = flat_player.horizontal_speed()
+	await frames(30)
+	var flat_speed: float = flat_player.horizontal_speed()
+	var flat_sliding: bool = flat_player.move_state == FPSController.MoveState.SLIDE
 	await finish(flat)
 	var hill: Node3D = make_level()
 	var slope: float = deg_to_rad(20.0)
 	add_box(hill, Vector3(6.0, 1.0, 40.0), Vector3(0.0, 0.0, 0.0), Basis(Vector3.RIGHT, slope))
 	var top_z: float = -15.0
 	var top_y: float = -top_z * tan(slope) + 0.5 / cos(slope)
-	var ramp_speed: float = await slide_speed_after(hill, Vector3(0.0, top_y + 0.05, top_z), PI)
-	measure("flat slide speed after 0.5 s", flat_speed, "m/s")
-	measure("20 degree downhill slide speed after 0.5 s", ramp_speed, "m/s")
-	check(flat_speed > 4.0 and ramp_speed > flat_speed + 1.5, "Sliding 0.5 s down a 20 degree ramp keeps at least 1.5 m/s more speed than on flat ground")
+	var ramp_player: FPSController = await start_slide(hill, Vector3(0.0, top_y + 0.05, top_z), PI)
+	var ramp_entry: float = ramp_player.horizontal_speed()
+	await frames(30)
+	var ramp_speed: float = ramp_player.horizontal_speed()
+	var ramp_sliding: bool = ramp_player.move_state == FPSController.MoveState.SLIDE
+	measure("flat slide entry speed", flat_entry, "m/s")
+	measure("flat slide speed 0.5 s after entry", flat_speed, "m/s")
+	measure("20 degree downhill slide entry speed", ramp_entry, "m/s")
+	measure("20 degree downhill slide speed 0.5 s after entry", ramp_speed, "m/s")
+	check(flat_sliding and absf(flat_speed - 10.64) < 0.02, "A flat slide loses 6.5 m/s per second, so 0.5 s after entry it has 10.64 m/s")
+	check(ramp_sliding and absf(ramp_entry - 14.03) < 0.02 and absf(ramp_speed - 14.96) < 0.02, "A slide down a 20 degree ramp gains speed from 14.03 m/s at entry to 14.96 m/s 0.5 s later, because g sin(20) is 1.85 m/s² more than 6.5 m/s²")
 	await finish(hill)
 
 

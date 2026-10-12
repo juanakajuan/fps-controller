@@ -265,7 +265,7 @@ func _move_ground(delta: float) -> void:
 
 
 func _move_slide(delta: float) -> void:
-	var horizontal: Vector3 = _friction(_horizontal_velocity(), settings.slide_friction, settings.stop_speed, delta)
+	var horizontal: Vector3 = _horizontal_velocity().move_toward(Vector3.ZERO, settings.slide_deceleration * delta)
 	var speed_limit: float = maxf(horizontal.length(), settings.slide_max_speed)
 	# The horizontal part of the floor normal has length sin(slope), so this adds g * sin(slope) downhill.
 	var floor_normal: Vector3 = get_floor_normal()
