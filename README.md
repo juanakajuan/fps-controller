@@ -143,8 +143,8 @@ Gravity is `2 * jump_height / jump_time_to_apex^2`. The jump speed is `2 * jump_
 
 | Value | Default | Unit | Function |
 |---|---|---|---|
-| `air_acceleration` | 8 | 1/s | Acceleration in the air |
-| `air_max_wish_speed` | 3.0 | m/s | Highest speed that air input adds along its own direction |
+| `air_acceleration` | 10 | 1/s | Acceleration in the air |
+| `air_max_wish_speed` | 5.0 | m/s | Highest speed that air input adds along its own direction |
 
 The air has no friction. Air input adds speed only along the input direction, up to `air_max_wish_speed`. If you strafe and turn in the air, the body gets faster. This movement is air strafing.
 
@@ -313,9 +313,9 @@ If you do not give a path, the file is `user://visual_smoke.png`.
 These checks passed with Godot 4.7.2 on Linux on 2026-10-12:
 
 - `bash tests/run_checks.sh` passed. The editor import and the parse of all six scripts gave no errors and no warnings.
-- The test suite passed on Jolt Physics with 62 checks and 0 failures.
-- The test suite passed on Godot Physics with 62 checks and 0 failures.
-- The test suite passed again on Jolt Physics and on Godot Physics with physics interpolation off, with 62 checks and 0 failures on each. A temporary `override.cfg` file set `common/physics_interpolation=false` in the `[physics]` section.
+- The test suite passed on Jolt Physics with 63 checks and 0 failures.
+- The test suite passed on Godot Physics with 63 checks and 0 failures.
+- The test suite passed again on Jolt Physics and on Godot Physics with physics interpolation off, with 63 checks and 0 failures on each. A temporary `override.cfg` file set `common/physics_interpolation=false` in the `[physics]` section.
 - The demo launch for 180 frames gave no errors and no warnings.
 - The visual smoke test passed with Vulkan Forward+ at 1600x900. The luminance spread of the frame was 1.0. A frame of one color gives 0.0.
 
@@ -328,8 +328,9 @@ The test suite measured these values with the default settings:
 | Held jump height | 1.251 m | 1.251 m |
 | Time to the highest point of a held jump | 0.317 s | 0.317 s |
 | Jump height with jump released after 0.05 s | 0.584 m | 0.583 m |
-| Air speed from a standing jump with forward held | 3.0 m/s | 3.0 m/s |
-| Speed after 25 ticks of air strafing from 10.5 m/s | 11.83 m/s | 11.83 m/s |
+| Air speed from a standing jump with forward held | 5.0 m/s | 5.0 m/s |
+| Path turn from a walk jump with only the right key held | 35.5 degrees | 35.5 degrees |
+| Speed after 25 ticks of air strafing from 10.5 m/s | 13.46 m/s | 13.46 m/s |
 | Speed on the first slide tick from sprint | 13.89 m/s | 13.89 m/s |
 | Slide time on flat floor until the slide stops | 1.55 s | 1.55 s |
 | Average speed across a 0.3 m step at walk speed | 7.06 m/s | 7.06 m/s |

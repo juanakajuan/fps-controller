@@ -28,8 +28,8 @@ extends Resource
 @export_range(1.0, 200.0, 0.5, "suffix:m/s") var terminal_fall_speed: float = 50.0
 
 @export_group("Air")
-@export_range(0.0, 100.0, 0.1) var air_acceleration: float = 8.0
-@export_range(0.0, 50.0, 0.1, "suffix:m/s") var air_max_wish_speed: float = 3.0
+@export_range(0.0, 100.0, 0.1) var air_acceleration: float = 10.0
+@export_range(0.0, 50.0, 0.1, "suffix:m/s") var air_max_wish_speed: float = 5.0
 
 @export_group("Slide")
 @export_range(0.0, 50.0, 0.1, "suffix:m/s") var slide_min_speed: float = 8.0

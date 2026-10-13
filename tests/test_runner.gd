@@ -74,8 +74,8 @@ func tuning() -> FPSSettings:
 	values.coyote_time = 0.12
 	values.jump_buffer_time = 0.12
 	values.terminal_fall_speed = 50.0
-	values.air_acceleration = 8.0
-	values.air_max_wish_speed = 3.0
+	values.air_acceleration = 10.0
+	values.air_max_wish_speed = 5.0
 	values.slide_min_speed = 8.0
 	values.slide_boost = 3.5
 	values.slide_max_speed = 15.0
@@ -244,7 +244,21 @@ func test_air_control() -> void:
 			break
 		air_speed = player.horizontal_speed()
 	measure("air speed from a standing jump with forward held", air_speed, "m/s")
-	check(air_speed >= 2.5, "Holding forward during a standing jump gives at least 2.5 m/s before landing")
+	check(air_speed >= 4.5, "Holding forward during a standing jump gives at least 4.5 m/s before landing")
+	await frames(60)
+	press_jump(player)
+	await frames(1)
+	player.intent.move = Vector2(1.0, 0.0)
+	var air_velocity: Vector3 = player.velocity
+	for tick: int in range(90):
+		await physics_frame
+		if player.move_state != FPSController.MoveState.AIR:
+			break
+		air_velocity = player.velocity
+	var turn: float = rad_to_deg(Vector2(air_velocity.x, -air_velocity.z).angle_to(Vector2(0.0, 1.0)))
+	measure("path turn from a walk jump with only the right key held", turn, "deg")
+	check(turn >= 30.0, "Holding only the right key during a walk jump turns the path right by at least 30 degrees")
+	player.intent.move = Vector2(0.0, 1.0)
 	player.intent.sprint_held = true
 	await frames(60)
 	press_jump(player)
