@@ -43,9 +43,12 @@ Choice: **B**. The body runs on the physics clock and the camera runs on the ren
 
 - `addons/fps_controller/fps_settings.gd`. `class_name FPSSettings extends Resource`. All tuning, grouped with `@export_group`. The only source of truth for sizes and speeds.
 - `addons/fps_controller/fps_controller.gd`. `class_name FPSController extends CharacterBody3D`. Builds its own children from settings. Parses input into `Intent`. Runs the move state machine. Steps up stairs.
+- `addons/fps_controller/fps_recording.gd`. `class_name FPSRecording extends Resource`. The start state and the per-tick intent, yaw, and pitch of a recorded run. It saves and loads with `ResourceSaver` and `ResourceLoader`.
 - `addons/fps_controller/fps_camera_rig.gd`. `class_name FPSCameraRig extends Node3D`. Top-level node. Places the camera every rendered frame from the interpolated body position plus look angles plus feel effects.
-- `demo/demo.tscn` and `demo/demo_level.gd`. A test level built in code: flat floor, stairs, a ramp, gaps, ledges, a low ceiling, boxes.
+- `demo/demo.tscn` and `demo/demo_level.gd`. A test level built in code: flat floor, stairs, a ramp, gaps, ledges, a low ceiling, boxes. R starts and stops a recording of the player. G plays the last recording on a ghost: a second `FPSController` with `player_controlled` false, a translucent capsule, no collision layer, and a collision exception for the player.
 - `tests/test_runner.gd`. Headless physics integration tests.
+- `tests/record_golden.gd`. Records the test route into `tests/golden/route.tres`.
+- `tests/golden/route.tres`. The golden recording that `test_golden_run()` plays.
 - `tests/visual_smoke.gd`. Windowed launch that captures one viewport frame.
 
 ## Data shapes
@@ -85,6 +88,38 @@ var camera: Camera3D
 func look(delta_yaw: float, delta_pitch: float) -> void
 func teleport(target_position: Vector3, target_yaw: float) -> void
 func horizontal_speed() -> float
+
+signal playback_finished
+
+func start_recording() -> void
+func stop_recording() -> FPSRecording   # null if no recording runs
+func is_recording() -> bool
+func play(recording: FPSRecording) -> void
+func stop_playback() -> void
+func is_playing() -> bool
+
+var _recording: FPSRecording   # null when not recording
+var _playback: FPSRecording    # null when not playing
+var _playback_tick: int        # index of the next tick to apply
+```
+
+```gdscript
+class_name FPSRecording extends Resource
+
+enum ButtonBit { JUMP_PRESSED = 1, JUMP_HELD = 2, SPRINT_HELD = 4, CROUCH_HELD = 8 }
+
+@export var tick_rate: int              # Engine.physics_ticks_per_second at record time
+@export var start_position: Vector3
+@export var start_velocity: Vector3
+@export var start_yaw: float
+@export var start_pitch: float
+@export var moves: PackedVector2Array   # one entry per physics tick
+@export var buttons: PackedByteArray    # ButtonBit flags
+@export var yaws: PackedFloat64Array    # absolute yaw
+@export var pitches: PackedFloat64Array # absolute pitch
+
+func tick_count() -> int
+func validation_error(current_tick_rate: int) -> String   # empty if the recording can play
 ```
 
 The body never rotates. Facing is `yaw` only. The capsule is round, so body rotation adds nothing and would put mouse look behind physics interpolation.
@@ -161,6 +196,29 @@ GROUND and SLIDE move through `_move_on_floor()`. It tries `_step_up()` first. I
 
 A walkable top is a contact normal within `floor_max_angle`. If the capsule rests on an edge, the contact normal is tilted. Then a 0.1 m ray down, 0.02 m past the contact point on the side away from the capsule center, reads the real top surface.
 
+## Record and play
+
+`_physics_process()` gets the intent of the tick from one source:
+
+1. If a playback runs, `_apply_playback_tick()` writes `intent`, `yaw`, and `pitch` from the next recorded tick.
+2. Else, if `player_controlled` is true, `_read_intent()` reads `Input`.
+3. Else, the intent is what the caller wrote.
+
+Then, if a recording runs, `_record_tick()` appends `intent`, `yaw`, and `pitch`. This occurs before the tick clears `jump_pressed`, so the press is in the recording. After the move, if the playback applied its last tick, the playback stops and `playback_finished` is emitted. `stop_playback()` sets all intent fields to false or zero, so a bot does not keep the last recorded input.
+
+The recording keeps absolute yaw and pitch for each tick, not look deltas. Mouse look and gamepad look change `yaw` and `pitch` on each rendered frame, not on each tick. Only the value at the tick moves the body, so the absolute value replays the body exactly. While a playback runs, `_process()` and `_unhandled_input()` do not change `yaw` and `pitch`, so a recording can play on the body of the player without look jitter. The mouse capture still operates.
+
+`play()` calls `teleport()` to the start position and start yaw, then sets `pitch` and `velocity`. `teleport()` settles with zero velocity, so it does not change the velocity that `play()` sets after it.
+
+A recording and a playback can run at the same time on one body. The recording then records the playback. `play()` teleports the body, and a recording does not record a teleport, so call `start_recording()` after `play()` to get a copy that starts at the same state. A new `start_recording()` discards a recording that runs. A new `play()` replaces a playback that runs.
+
+Limits of the start state:
+
+- The recording keeps the position, velocity, yaw, and pitch at the start. It does not keep `move_state`, `stance`, or the timers (coyote time, jump buffer, slide cooldown, the jump cut, the crouch press edge). `teleport()` resets the coyote and jump buffer timers and finds the state from the floor. A recording that starts in the air, in a slide, crouched, or in a slide cooldown can diverge from the original.
+- `teleport()` snaps a body that is within `step_height` above the floor down onto the floor. A recording that starts just above the floor starts on the floor in the playback.
+- A `teleport()` during a recording is not in the recording.
+- The playback is exact on the engine that recorded it. On a different physics engine, the contacts differ a little. The golden route ends 6 mm apart on Jolt Physics and Godot Physics, and the gap starts when the body climbs the 0.3 m step.
+
 ## Camera rig
 
 `top_level = true` and `physics_interpolation_mode = PHYSICS_INTERPOLATION_MODE_OFF`. The rig interpolates the body position itself. It does not use `get_global_transform_interpolated()`.
@@ -197,6 +255,7 @@ Mouse look applies in `_unhandled_input` from `InputEventMouseMotion.screen_rela
 ## Boundaries
 
 - Input: `Input` and `InputMap` are read only in `_read_intent()`, `_unhandled_input`, and `_process` (gamepad look). Missing default actions register in `_ready`. Existing actions are not changed.
+- Recordings: `play()` is the boundary for `FPSRecording`. It refuses a null recording, a `tick_rate` of 0 or less, a `tick_rate` that is not `Engine.physics_ticks_per_second`, and per-tick arrays of different lengths. It calls `push_error()` with the reason, and the body does not change. The code after `play()` trusts the data.
 - Settings: `FPSSettings` validates ranges with `@export_range`. If `settings` is null, the controller makes `FPSSettings.new()`.
 - Physics interpolation: the camera does not need `physics/common/physics_interpolation`. The controller does not warn when it is off. Other moving bodies in a game still need it for smooth motion. `teleport()` calls `reset_physics_interpolation()`, so a node that a user attaches to the body does not move across the gap.
 - Teleport: `teleport()` sets the speed to zero, sets `yaw`, and sets `pitch` to zero. Then it settles the body: a zero-motion `move_and_slide()` and `apply_floor_snap()` find the floor, the state becomes GROUND or AIR with no `landed` signal, and the rig snaps.
@@ -204,7 +263,7 @@ Mouse look applies in `_unhandled_input` from `InputEventMouseMotion.screen_rela
 
 ## Verification plan
 
-Headless tests drive real physics through `intent` with `player_controlled = false`, and each test builds its own `FPSSettings` with explicit values, so the expected values are literals in the test. The suite runs on Jolt Physics and on Godot Physics. One test caps the frame rate at 240 FPS and reads the camera height on each rendered frame while the body climbs twenty 0.3 m steps.
+Headless tests drive real physics through `intent` with `player_controlled = false`, and each test builds its own `FPSSettings` with explicit values, so the expected values are literals in the test. The suite runs on Jolt Physics and on Godot Physics. The record and play tests drive one route with a step, a sprint, a slide, a slide jump, a bunny hop, and a turn in the air. A playback on a fresh body must end at the same position and emit the same `jumped` and `move_state_changed` events on the same ticks. A golden recording in `tests/golden/` must end at a literal position on both engines. One test caps the frame rate at 240 FPS and reads the camera height on each rendered frame while the body climbs twenty 0.3 m steps.
 
 ## Accepted deviations
 

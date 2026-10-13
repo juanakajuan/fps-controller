@@ -2,11 +2,12 @@
 
 This addon is a first-person controller for fast movement. It is written in GDScript only. The body moves on the physics tick. The camera moves on each rendered frame. All tuning values are in one `FPSSettings` resource.
 
-The addon has three scripts:
+The addon has four scripts:
 
 - `fps_controller.gd` (`FPSController`) is the `CharacterBody3D`. It reads input, runs the move state machine, and climbs stairs.
 - `fps_camera_rig.gd` (`FPSCameraRig`) places the camera each rendered frame. It adds FOV kick, strafe roll, head bob, a landing dip, and smooth eye height.
 - `fps_settings.gd` (`FPSSettings`) holds all sizes, speeds, and camera values.
+- `fps_recording.gd` (`FPSRecording`) holds the input of a recorded run for replays, ghost runs, and tests.
 
 ## Install the addon
 
@@ -53,6 +54,50 @@ bot.look(delta_yaw, delta_pitch)
 ```
 
 The demo in `demo/demo.tscn` builds a test level in code. Open the project and press F5 to play it.
+
+## Record and play input
+
+You can record the input of a body on each physics tick, and then play it back through the same body or a different body. Use it for replays, ghost runs, and tests.
+
+To record a run:
+
+```gdscript
+player.start_recording()
+# The player plays.
+var recording: FPSRecording = player.stop_recording()
+ResourceSaver.save(recording, "user://best_run.tres")
+```
+
+To play a run on a ghost body:
+
+```gdscript
+var ghost: FPSController = FPSController.new()
+ghost.player_controlled = false
+ghost.settings = player.settings
+level.add_child(ghost)
+ghost.playback_finished.connect(func() -> void: print("The ghost is at the finish"))
+ghost.play(load("user://best_run.tres") as FPSRecording)
+```
+
+`play()` moves the body to the start position, the start velocity, and the start look direction of the recording. Then, on each physics tick, it applies one recorded tick: the intent, the yaw, and the pitch. After the last tick, the body emits `playback_finished`.
+
+Obey these rules:
+
+- Use the same `FPSSettings` values and the same level for the playback as for the recording. If they are different, the body goes on a different path.
+- Use the same physics tick rate. `play()` refuses a recording from a different tick rate and a recording whose per-tick arrays have different lengths. It shows an error, and the body does not change.
+- Start the recording when the body stands on the floor. The recording does not keep the move state, the stance, coyote time, the jump buffer, or the slide cooldown. A recording that starts in the air, in a slide, or crouched can go on a different path.
+- Do not call `teleport()` during a recording. The recording does not keep a teleport.
+- To stop a ghost before its end, call `stop_playback()`.
+
+The recording keeps the absolute yaw and pitch of each tick, not the look motion. Thus the playback has the same view direction on each tick as the original.
+
+During a playback, the mouse and the look stick do not turn the view, also when `player_controlled` is true. Thus you can play a recording on the body of the player. The body also ignores the move, jump, sprint, and crouch actions until the playback ends.
+
+You can record a body while it plays a recording. The new recording then gets the playback. Call `start_recording()` after `play()`, because `play()` teleports the body.
+
+A playback on the same physics engine is exact. On Jolt Physics and on Godot Physics, the contacts are a little different, so the same recording can end a few millimeters apart on the two engines.
+
+In the demo, press R to start and stop a recording. Press G to play the last recording on a ghost.
 
 ## Input actions
 
@@ -206,6 +251,7 @@ These values are on `FPSController`, not on `FPSSettings`, because each player c
 | `jumped` | The body jumps |
 | `landed(impact_speed: float)` | The body lands. `impact_speed` is the downward speed in m/s just before the contact. It is zero or more. |
 | `move_state_changed(previous: MoveState, current: MoveState)` | `move_state` changes |
+| `playback_finished` | A playback applied its last tick |
 
 On a bunny hop, the controller emits `landed` and then `jumped` on the same tick. `move_state` stays `AIR`.
 
@@ -237,6 +283,12 @@ On a bunny hop, the controller emits `landed` and then `jumped` on the same tick
 | `look(delta_yaw: float, delta_pitch: float) -> void` | Turns the view by the two angles in radians. The pitch stops at 89 degrees. |
 | `teleport(target_position: Vector3, target_yaw: float) -> void` | Moves the body, sets the speed to zero, sets `yaw`, and sets `pitch` to zero. It resets physics interpolation and puts the camera at its new position with no smoothing. |
 | `horizontal_speed() -> float` | Returns the horizontal speed in m/s |
+| `start_recording() -> void` | Starts a new recording from the current state of the body. A recording that runs is discarded. |
+| `stop_recording() -> FPSRecording` | Stops the recording and returns it. Returns null if no recording runs. |
+| `is_recording() -> bool` | Returns true while a recording runs |
+| `play(recording: FPSRecording) -> void` | Moves the body to the start state of the recording and plays one recorded tick on each physics tick |
+| `stop_playback() -> void` | Stops the playback and clears `intent` |
+| `is_playing() -> bool` | Returns true while a playback runs |
 
 ## Physics interpolation
 
@@ -298,6 +350,8 @@ The script runs these checks:
 
 The test suite prints `PASS` or `FAIL` for each check, a `MEASURE` line for each measured value, and a `RESULT` line at the end. It exits with code 1 if a check fails.
 
+The test suite also prints two `ERROR` lines from `play()`. They are expected. The test gives `play()` two invalid recordings, and a line before the errors tells you this.
+
 Do not add `--fixed-fps` to the suite command. With it, the results are the same, but Jolt Physics can print a job system warning.
 
 The visual smoke test opens a window, so it needs a display. It plays the demo for 3 seconds and saves one frame as a PNG file. It fails if the frame is blank:
@@ -310,12 +364,12 @@ If you do not give a path, the file is `user://visual_smoke.png`.
 
 ## Verified checks
 
-These checks passed with Godot 4.7.2 on Linux on 2026-10-12:
+These checks passed with Godot 4.7.2 on Linux on 2026-10-13:
 
-- `bash tests/run_checks.sh` passed. The editor import and the parse of all six scripts gave no errors and no warnings.
-- The test suite passed on Jolt Physics with 63 checks and 0 failures.
-- The test suite passed on Godot Physics with 63 checks and 0 failures.
-- The test suite passed again on Jolt Physics and on Godot Physics with physics interpolation off, with 63 checks and 0 failures on each. A temporary `override.cfg` file set `common/physics_interpolation=false` in the `[physics]` section.
+- `bash tests/run_checks.sh` passed. The editor import and the parse of all eight scripts gave no errors and no warnings.
+- The test suite passed on Jolt Physics with 74 checks and 0 failures.
+- The test suite passed on Godot Physics with 74 checks and 0 failures.
+- The test suite passed again on Jolt Physics and on Godot Physics with physics interpolation off, with 74 checks and 0 failures on each. A temporary `override.cfg` file set `common/physics_interpolation=false` in the `[physics]` section.
 - The demo launch for 180 frames gave no errors and no warnings.
 - The visual smoke test passed with Vulkan Forward+ at 1600x900. The luminance spread of the frame was 1.0. A frame of one color gives 0.0.
 
@@ -341,3 +395,14 @@ The test suite measured these values with the default settings:
 | Vertical FOV when you stand still | 58.72 degrees | 58.72 degrees |
 | Vertical FOV at sprint speed | 63.31 degrees | 63.31 degrees |
 | Largest downward camera move in one frame up twenty 0.3 m steps at 240 FPS | 0.000 m | 0.000 m |
+| End position error of a recorded route played on a fresh body | 0.000 mm | 0.000 mm |
+| End position error of the same route after a save to `.tres` and a load | 0.000 mm | 0.000 mm |
+| End of the golden route in `tests/golden/route.tres` | (7.343, 0.301, -33.682) | (7.343, 0.301, -33.688) |
+
+The golden route ends 6 mm apart on the two engines. The gap starts when the body climbs the 0.3 m step, where the contacts of the engines are different. The golden test accepts 5 mm around (7.343, 0.301, -33.685).
+
+To record the golden route again after a change to the movement, run this command, and then update the end position in `test_golden_run()`:
+
+```sh
+godot --headless --path . -s tests/record_golden.gd
+```
