@@ -1,6 +1,14 @@
 extends SceneTree
 
 const TICK: float = 1.0 / 60.0
+const GOLDEN_PATH: String = "res://tests/golden/route.tres"
+
+
+## One run of the route: where the body ended, and its jumped and move_state_changed events with the tick of each.
+class Run:
+	var recording: FPSRecording
+	var end: Vector3
+	var events: Array[String] = []
 
 var checks: int = 0
 var failures: int = 0
@@ -48,6 +56,11 @@ func run() -> void:
 	await test_camera_rig()
 	await test_camera_on_stairs()
 	await test_player_input()
+	await test_record_round_trip()
+	await test_recording_save_and_load()
+	await test_golden_run()
+	await test_invalid_recording_refused()
+	await test_playback_ignores_look_input()
 	print("RESULT: %d checks, %d failures" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -611,4 +624,168 @@ func test_player_input() -> void:
 	var turned: float = rad_to_deg(-player.yaw)
 	measure("gamepad turn in 0.5 s at full stick", turned, "deg")
 	check(turned > 100.0 and turned < 140.0, "Full right stick turns the view right by about 120 degrees in 0.5 s (240 degrees per second)")
+	await finish(level)
+
+
+func make_route_level() -> Node3D:
+	var level: Node3D = make_level()
+	add_box(level, Vector3(40.0, 0.3, 200.0), Vector3(0.0, 0.15, -102.0))
+	return level
+
+
+func log_events(player: FPSController, run: Run) -> void:
+	var start: int = Engine.get_physics_frames()
+	player.jumped.connect(func() -> void: run.events.append("%d jumped" % (Engine.get_physics_frames() - start)))
+	player.move_state_changed.connect(func(previous: FPSController.MoveState, current: FPSController.MoveState) -> void:
+		run.events.append("%d %s>%s" % [Engine.get_physics_frames() - start, FPSController.MoveState.find_key(previous), FPSController.MoveState.find_key(current)]))
+
+
+## Walks up a 0.3 m step, sprints, slides, jumps out of the slide, bunny hops, turns in the air, and walks to a stop.
+func drive_route(player: FPSController) -> void:
+	player.intent.move = Vector2(0.0, 1.0)
+	await frames(40)
+	player.intent.sprint_held = true
+	await frames(50)
+	player.intent.crouch_held = true
+	await frames(20)
+	press_jump(player)
+	await frames(1)
+	player.intent.crouch_held = false
+	await frames(31)
+	player.intent.jump_pressed = true
+	await frames(10)
+	player.intent.move = Vector2(1.0, 0.0)
+	for tick: int in range(20):
+		player.look(-0.03, 0.01)
+		await physics_frame
+	player.intent.move = Vector2(0.0, 1.0)
+	player.intent.sprint_held = false
+	player.intent.jump_held = false
+	await frames(40)
+	player.intent.move = Vector2.ZERO
+	await frames(30)
+
+
+func record_route() -> Run:
+	var level: Node3D = make_route_level()
+	var player: FPSController = spawn(level, tuning(), Vector3.ZERO, 0.0)
+	await frames(5)
+	var run: Run = Run.new()
+	log_events(player, run)
+	player.start_recording()
+	await drive_route(player)
+	run.recording = player.stop_recording()
+	run.end = player.global_position
+	await finish(level)
+	return run
+
+
+func replay(recording: FPSRecording) -> Run:
+	var level: Node3D = make_route_level()
+	var player: FPSController = spawn(level, tuning(), Vector3.ZERO, 0.0)
+	await frames(5)
+	var run: Run = Run.new()
+	var finished: Array[int] = [0]
+	player.playback_finished.connect(func() -> void: finished[0] += 1)
+	log_events(player, run)
+	player.play(recording)
+	await wait_for_playback(player, recording.tick_count() + 10)
+	run.end = player.global_position if finished[0] == 1 else Vector3.INF
+	await finish(level)
+	return run
+
+
+func wait_for_playback(player: FPSController, limit: int) -> void:
+	for tick: int in range(limit):
+		if not player.is_playing():
+			return
+		await physics_frame
+
+
+func test_record_round_trip() -> void:
+	var original: Run = await record_route()
+	check(original.recording.tick_count() == 242, "A recording of the 242-tick route has 242 ticks")
+	check(original.events == ["90 GROUND>SLIDE", "110 SLIDE>AIR", "110 jumped", "146 jumped", "182 AIR>GROUND"], "The route slides, jumps out of the slide, bunny hops on the landing at tick 146 without a state change, and lands")
+	var copy: Run = await replay(original.recording)
+	var error: float = copy.end.distance_to(original.end)
+	measure("round trip end position error", error * 1000.0, "mm")
+	check(error < 0.000001, "Playback of the route on a fresh body ends within 0.001 mm of the original end")
+	check(copy.events == original.events, "Playback emits the same jumped and move_state_changed events on the same ticks as the original")
+
+
+func test_recording_save_and_load() -> void:
+	var original: Run = await record_route()
+	var path: String = "user://fps_recording_test.tres"
+	check(ResourceSaver.save(original.recording, path) == OK, "ResourceSaver saves the recording")
+	var loaded: FPSRecording = ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as FPSRecording
+	var copy: Run = await replay(loaded)
+	var error: float = copy.end.distance_to(original.end)
+	measure("saved and loaded round trip end position error", error * 1000.0, "mm")
+	check(error < 0.000001, "A recording saved to a .tres file and loaded again plays to within 0.001 mm of the original end")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func test_golden_run() -> void:
+	var golden: FPSRecording = load(GOLDEN_PATH) as FPSRecording
+	var run: Run = await replay(golden)
+	var error: float = run.end.distance_to(Vector3(7.343, 0.301, -33.685))
+	measure("golden run end z", run.end.z, "m")
+	measure("golden run distance from (7.343, 0.301, -33.685)", error * 1000.0, "mm")
+	check(golden.tick_count() == 242 and error < 0.005, "The golden recording plays to within 5 mm of (7.343, 0.301, -33.685)")
+
+
+func steady_recording(move: Vector2, look_yaw: float, look_pitch: float, ticks: int) -> FPSRecording:
+	var recording: FPSRecording = FPSRecording.new()
+	recording.tick_rate = Engine.physics_ticks_per_second
+	recording.start_position = Vector3(5.0, 0.0, 5.0)
+	recording.start_yaw = look_yaw
+	recording.start_pitch = look_pitch
+	for tick: int in range(ticks):
+		recording.moves.append(move)
+		recording.buttons.append(0)
+		recording.yaws.append(look_yaw)
+		recording.pitches.append(look_pitch)
+	return recording
+
+
+func test_invalid_recording_refused() -> void:
+	var level: Node3D = make_level()
+	var player: FPSController = spawn(level, tuning(), Vector3.ZERO, 0.0)
+	await frames(5)
+	var uneven: FPSRecording = steady_recording(Vector2(0.0, 1.0), 0.0, 0.0, 30)
+	uneven.pitches.resize(29)
+	var wrong_rate: FPSRecording = steady_recording(Vector2(0.0, 1.0), 0.0, 0.0, 30)
+	wrong_rate.tick_rate = Engine.physics_ticks_per_second * 2
+	print("The next two errors are expected: play() refuses a recording with uneven arrays and a recording at the wrong tick rate.")
+	player.play(uneven)
+	var uneven_playing: bool = player.is_playing()
+	player.play(wrong_rate)
+	var wrong_rate_playing: bool = player.is_playing()
+	await frames(30)
+	check(not uneven_playing and player.global_position.distance_to(Vector3.ZERO) < 0.001, "play() refuses a recording whose arrays have different lengths, and the body stays at its spawn")
+	check(not wrong_rate_playing and player.horizontal_speed() == 0.0, "play() refuses a recording made at a different tick rate, and the body does not move")
+	await finish(level)
+
+
+func test_playback_ignores_look_input() -> void:
+	var level: Node3D = make_level()
+	var player: FPSController = FPSController.new()
+	player.settings = tuning()
+	player.manage_mouse_capture = false
+	level.add_child(player)
+	player.teleport(Vector3.ZERO, 0.0)
+	Input.action_press(&"look_right")
+	Input.action_press(&"move_forward")
+	player.play(steady_recording(Vector2.ZERO, 0.5, 0.2, 60))
+	await frames(30)
+	var playing_yaw: float = player.yaw
+	var playing_pitch: float = player.pitch
+	var playing_position: Vector3 = player.global_position
+	await wait_for_playback(player, 60)
+	await frames(10)
+	var after_yaw: float = player.yaw
+	Input.action_release(&"look_right")
+	Input.action_release(&"move_forward")
+	check(playing_yaw == 0.5 and playing_pitch == 0.2 and playing_position.distance_to(Vector3(5.0, 0.0, 5.0)) < 0.001, "During playback on a player-controlled body, held look_right and move_forward change nothing: yaw stays 0.5, pitch stays 0.2, and the body stays at the recorded start")
+	check(after_yaw < 0.0, "After the playback ends, held look_right turns the view again")
 	await finish(level)
