@@ -36,8 +36,11 @@ const RAMP_COLOR: Color = Color(0.45, 0.7, 0.55)
 const BLOCK_COLOR: Color = Color(0.8, 0.35, 0.32)
 const PLATFORM_COLOR: Color = Color(0.4, 0.55, 0.85)
 const BOX_COLOR: Color = Color(0.75, 0.72, 0.6)
+const GHOST_COLOR: Color = Color(0.4, 0.8, 1.0, 0.35)
 
 var player: FPSController
+var ghost: FPSController
+var last_recording: FPSRecording
 var _shader: Shader = Shader.new()
 var _hud: Label
 
@@ -50,6 +53,7 @@ func _ready() -> void:
 	player.name = "Player"
 	add_child(player)
 	player.teleport(SPAWN, 0.0)
+	_build_ghost()
 	_build_hud()
 
 
@@ -60,11 +64,52 @@ func _process(_delta: float) -> void:
 		str(FPSController.Stance.find_key(player.stance)),
 		Engine.get_frames_per_second(),
 	]
+	if player.is_recording():
+		_hud.text += "   REC"
+	if ghost.is_playing():
+		_hud.text += "   GHOST"
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	var key: InputEventKey = event as InputEventKey
+	if key == null or not key.pressed or key.echo:
+		return
+	if key.physical_keycode == KEY_R:
+		if player.is_recording():
+			last_recording = player.stop_recording()
+		else:
+			player.start_recording()
+	elif key.physical_keycode == KEY_G and last_recording != null:
+		ghost.visible = true
+		ghost.play(last_recording)
 
 
 func _physics_process(_delta: float) -> void:
 	if player.global_position.y < -30.0:
 		player.teleport(SPAWN, 0.0)
+
+
+## The ghost is on no collision layer and ignores the player, so the player walks through it and it cannot push the player off the recorded path.
+func _build_ghost() -> void:
+	ghost = FPSController.new()
+	ghost.name = "Ghost"
+	ghost.player_controlled = false
+	ghost.collision_layer = 0
+	ghost.add_collision_exception_with(player)
+	ghost.visible = false
+	add_child(ghost)
+	var capsule: CapsuleMesh = CapsuleMesh.new()
+	capsule.radius = ghost.settings.capsule_radius
+	capsule.height = ghost.settings.stand_height
+	var material: StandardMaterial3D = StandardMaterial3D.new()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = GHOST_COLOR
+	var view: MeshInstance3D = MeshInstance3D.new()
+	view.mesh = capsule
+	view.material_override = material
+	view.position = Vector3(0.0, capsule.height * 0.5, 0.0)
+	ghost.add_child(view)
 
 
 func _build_environment() -> void:
@@ -180,7 +225,7 @@ func _build_hud() -> void:
 	_hud = _hud_label(22)
 	panel.add_child(_hud)
 	var controls: Label = _hud_label(15)
-	controls.text = "WASD move   Space jump   Shift sprint   Ctrl or C crouch   Esc free mouse   Click capture mouse"
+	controls.text = "WASD move   Space jump   Shift sprint   Ctrl or C crouch   R start or stop recording   G play the recording on a ghost   Esc free mouse   Click capture mouse"
 	panel.add_child(controls)
 
 
