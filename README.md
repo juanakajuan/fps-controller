@@ -1,6 +1,6 @@
-# Hold the Yard
+# Zombie Survival FPS
 
-Hold the Yard is a round-based survival first-person shooter for Godot 4.7. It is written in GDScript only. The game builds all nodes, geometry, materials, input actions, and the HUD in code. It uses no external assets.
+Zombie Survival FPS is a round-based survival first-person shooter for Godot 4.7. It is written in GDScript only. The game builds all nodes, geometry, materials, input actions, and the HUD in code. It uses no external assets.
 
 You stand in a walled yard with a pistol. Undead come in rounds. Each round has more zombies, and the zombies have more health and more speed. You get points for hits and kills. The game ends when you die. Your score is the number of rounds that you survived.
 
