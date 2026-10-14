@@ -21,7 +21,7 @@ if [[ -e override.cfg ]]; then
 fi
 
 fail_on_output "editor import" godot --headless --path . --editor --quit
-for script in addons/fps_controller/*.gd demo/*.gd tests/*.gd; do
+for script in addons/fps_controller/*.gd tests/*.gd; do
 	fail_on_output "parse $script" godot --headless --path . --check-only -s "$script"
 done
 
@@ -34,4 +34,3 @@ echo "Test suite on Godot Physics:"
 godot --headless --path . -s tests/test_runner.gd 2>&1 | grep -E 'RESULT|FAIL|SCRIPT ERROR'
 rm -f override.cfg
 
-fail_on_output "launch the demo for 180 frames" godot --headless --path . --quit-after 180

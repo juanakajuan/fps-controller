@@ -1,6 +1,6 @@
 extends SceneTree
 
-const DEMO: PackedScene = preload("res://demo/demo.tscn")
+const MAIN_SCENE: String = "res://game/main.tscn"
 const DEFAULT_OUTPUT: String = "user://visual_smoke.png"
 
 
@@ -11,10 +11,9 @@ func _initialize() -> void:
 func capture() -> void:
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	var output: String = ProjectSettings.globalize_path(args[0] if args.size() > 0 else DEFAULT_OUTPUT)
-	var demo: Node = DEMO.instantiate()
-	root.add_child(demo)
-	current_scene = demo
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var game: Node = (load(MAIN_SCENE) as PackedScene).instantiate()
+	root.add_child(game)
+	current_scene = game
 	await create_timer(3.0).timeout
 	await RenderingServer.frame_post_draw
 	var image: Image = root.get_texture().get_image()

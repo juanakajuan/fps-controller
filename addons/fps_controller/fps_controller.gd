@@ -18,7 +18,6 @@ class Intent:
 signal jumped
 signal landed(impact_speed: float)
 signal move_state_changed(previous: MoveState, current: MoveState)
-signal playback_finished
 
 const MAX_PITCH: float = PI * 89.0 / 180.0
 const STEP_CLEARANCE: float = 0.05
@@ -27,7 +26,6 @@ const STEP_PROBE: float = 0.1
 
 @export var settings: FPSSettings
 @export var player_controlled: bool = true
-@export var manage_mouse_capture: bool = true
 @export_range(0.001, 2.0, 0.001, "suffix:°/px") var mouse_sensitivity: float = 0.1
 @export_range(1.0, 1080.0, 1.0, "suffix:°/s") var gamepad_look_speed: float = 240.0
 ## Response curve exponent for the look stick. 1 is linear. Higher gives finer aim near the center.
@@ -51,9 +49,6 @@ var _crouch_was_held: bool = false
 var _jump_cut_armed: bool = false
 var _impact_speed: float = 0.0
 var _on_floor: bool = false
-var _recording: FPSRecording
-var _playback: FPSRecording
-var _playback_tick: int = 0
 
 
 func _ready() -> void:
@@ -75,13 +70,11 @@ func _ready() -> void:
 	add_child(_rig)
 	camera = _rig.camera
 	_register_default_actions()
-	if player_controlled and manage_mouse_capture:
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_settle()
 
 
 func _process(delta: float) -> void:
-	if not player_controlled or is_playing():
+	if not player_controlled:
 		return
 	var stick: Vector2 = Input.get_vector(&"look_left", &"look_right", &"look_up", &"look_down")
 	if stick == Vector2.ZERO:
@@ -95,21 +88,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not player_controlled:
 		return
 	if event is InputEventMouseMotion:
-		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not is_playing():
+		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 			var motion: Vector2 = (event as InputEventMouseMotion).screen_relative
 			var turn: float = deg_to_rad(mouse_sensitivity)
 			look(-motion.x * turn, -motion.y * turn * _pitch_sign())
-	elif manage_mouse_capture:
-		_update_mouse_capture(event)
 
 
 func _physics_process(delta: float) -> void:
-	if is_playing():
-		_apply_playback_tick()
-	elif player_controlled:
+	if player_controlled:
 		_read_intent()
-	if is_recording():
-		_record_tick()
 	_coyote_left = maxf(_coyote_left - delta, 0.0)
 	_jump_buffer_left = maxf(_jump_buffer_left - delta, 0.0)
 	_slide_cooldown_left = maxf(_slide_cooldown_left - delta, 0.0)
@@ -128,9 +115,6 @@ func _physics_process(delta: float) -> void:
 		MoveState.SLIDE:
 			_move_slide(delta)
 	_rig.record_tick()
-	if is_playing() and _playback_tick == _playback.tick_count():
-		stop_playback()
-		playback_finished.emit()
 
 
 func look(delta_yaw: float, delta_pitch: float) -> void:
@@ -148,64 +132,6 @@ func teleport(target_position: Vector3, target_yaw: float) -> void:
 	if is_inside_tree():
 		reset_physics_interpolation()
 		_settle()
-
-
-## Records the intent, yaw, and pitch of each physics tick from now on. A recording that runs is discarded.
-func start_recording() -> void:
-	_recording = FPSRecording.new()
-	_recording.tick_rate = Engine.physics_ticks_per_second
-	_recording.start_position = global_position
-	_recording.start_velocity = velocity
-	_recording.start_yaw = yaw
-	_recording.start_pitch = pitch
-
-
-## Returns null if no recording runs.
-func stop_recording() -> FPSRecording:
-	var finished: FPSRecording = _recording
-	_recording = null
-	return finished
-
-
-func is_recording() -> bool:
-	return _recording != null
-
-
-## Puts the body at the start state of the recording, then applies one recorded tick on each physics tick.
-## An invalid recording, or one made at a different tick rate, is refused with an error.
-func play(recording: FPSRecording) -> void:
-	if recording == null:
-		push_error("FPSController.play(): the recording is null.")
-		return
-	var problem: String = recording.validation_error(Engine.physics_ticks_per_second)
-	if not problem.is_empty():
-		push_error("FPSController.play(): the recording is refused. " + problem)
-		return
-	teleport(recording.start_position, recording.start_yaw)
-	pitch = recording.start_pitch
-	velocity = recording.start_velocity
-	_playback = recording
-	_playback_tick = 0
-	if recording.tick_count() == 0:
-		stop_playback()
-		playback_finished.emit()
-
-
-## Stops a playback and clears the intent, so the body does not keep the last recorded input.
-func stop_playback() -> void:
-	if not is_playing():
-		return
-	_playback = null
-	_playback_tick = 0
-	intent.move = Vector2.ZERO
-	intent.jump_pressed = false
-	intent.jump_held = false
-	intent.sprint_held = false
-	intent.crouch_held = false
-
-
-func is_playing() -> bool:
-	return _playback != null
 
 
 func horizontal_speed() -> float:
@@ -228,34 +154,6 @@ func _read_intent() -> void:
 	intent.jump_held = Input.is_action_pressed(&"jump")
 	intent.sprint_held = Input.is_action_pressed(&"sprint")
 	intent.crouch_held = Input.is_action_pressed(&"crouch")
-
-
-func _apply_playback_tick() -> void:
-	var bits: int = _playback.buttons[_playback_tick]
-	intent.move = _playback.moves[_playback_tick]
-	intent.jump_pressed = (bits & FPSRecording.ButtonBit.JUMP_PRESSED) != 0
-	intent.jump_held = (bits & FPSRecording.ButtonBit.JUMP_HELD) != 0
-	intent.sprint_held = (bits & FPSRecording.ButtonBit.SPRINT_HELD) != 0
-	intent.crouch_held = (bits & FPSRecording.ButtonBit.CROUCH_HELD) != 0
-	yaw = _playback.yaws[_playback_tick]
-	pitch = _playback.pitches[_playback_tick]
-	_playback_tick += 1
-
-
-func _record_tick() -> void:
-	var bits: int = 0
-	if intent.jump_pressed:
-		bits |= FPSRecording.ButtonBit.JUMP_PRESSED
-	if intent.jump_held:
-		bits |= FPSRecording.ButtonBit.JUMP_HELD
-	if intent.sprint_held:
-		bits |= FPSRecording.ButtonBit.SPRINT_HELD
-	if intent.crouch_held:
-		bits |= FPSRecording.ButtonBit.CROUCH_HELD
-	_recording.moves.append(intent.move)
-	_recording.buttons.append(bits)
-	_recording.yaws.append(yaw)
-	_recording.pitches.append(pitch)
 
 
 func _transition(crouch_pressed: bool) -> void:
@@ -518,18 +416,6 @@ static func _friction(horizontal: Vector3, amount: float, stop_speed: float, del
 
 func _pitch_sign() -> float:
 	return -1.0 if invert_y else 1.0
-
-
-func _update_mouse_capture(event: InputEvent) -> void:
-	if event is InputEventKey:
-		var key: InputEventKey = event as InputEventKey
-		if key.pressed and key.physical_keycode == KEY_ESCAPE:
-			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	elif event is InputEventMouseButton:
-		var button: InputEventMouseButton = event as InputEventMouseButton
-		if button.pressed and button.button_index == MOUSE_BUTTON_LEFT and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-			get_viewport().set_input_as_handled()
 
 
 func _register_default_actions() -> void:
