@@ -9,7 +9,7 @@ The game builds all nodes, geometry, materials, input actions, and UI in code. I
 ## Milestones
 
 1. **Core loop.** This document. One map, one starting pistol, rounds with harder waves, zombies that find a path to the player, player health with regeneration, points, death, and restart.
-2. **Weapons and buys.** Wall buys, a random weapon box, ammo buys. Points become a currency here.
+2. **Weapons and buys.** Wall buys, a random weapon box, ammo buys. Points become a currency here. `docs/weapons-and-buys.md` gives the design.
 3. **Upgrades.** Perk machines and a weapon upgrade machine.
 4. **Map and secrets.** A larger map, doors that the player buys to open areas, a power switch, and hidden secrets.
 
@@ -222,7 +222,7 @@ The melee is a state of the weapon, so the one state machine decides what the pl
 
 The melee ray starts at the camera, has the length `MELEE_RANGE`, and uses the mask `WORLD | ZOMBIES`. A wall stops it, and it hits at most one zombie. A hit emits `hit(target, MELEE_DAMAGE, HitKind.MELEE)`. A melee never fires and uses no ammunition. The view model thrusts forward by a sine over the MELEE time.
 
-Ammo in milestone 1: `refill()` on each new round. Milestone 2 replaces this with ammo buys.
+Ammo in milestone 1: `refill()` on each new round. Milestone 2 replaces this with ammo buys and removes `refill()`. See `docs/weapons-and-buys.md`.
 
 ```gdscript
 class_name Zombie extends CharacterBody3D
