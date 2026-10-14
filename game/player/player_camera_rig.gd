@@ -1,10 +1,10 @@
-class_name FPSCameraRig
+class_name PlayerCameraRig
 extends Node3D
 
 const BOB_FADE_RATE: float = 10.0
 const REFERENCE_ASPECT: float = 16.0 / 9.0
 
-var body: FPSController
+var body: Player
 var camera: Camera3D = Camera3D.new()
 
 var _previous_origin: Vector3 = Vector3.ZERO
@@ -64,7 +64,7 @@ func record_tick() -> void:
 
 
 func _process(delta: float) -> void:
-	var tuning: FPSSettings = body.settings
+	var tuning: PlayerSettings = body.settings
 	var speed: float = body.horizontal_speed()
 	_eye_height = lerpf(_eye_height, _target_eye_height(), _blend(tuning.eye_height_smoothing, delta))
 	_step_offset = lerpf(_step_offset, 0.0, _blend(tuning.step_smoothing, delta))
@@ -72,7 +72,7 @@ func _process(delta: float) -> void:
 	var right: Vector3 = Vector3.RIGHT.rotated(Vector3.UP, body.yaw)
 	var lateral: float = clampf(body.velocity.dot(right) / tuning.walk_speed, -1.0, 1.0)
 	_roll = lerpf(_roll, -deg_to_rad(tuning.strafe_roll_degrees) * lateral, _blend(tuning.roll_smoothing, delta))
-	var bobbing: bool = tuning.head_bob_enabled and body.move_state == FPSController.MoveState.GROUND
+	var bobbing: bool = tuning.head_bob_enabled and body.move_state == Player.MoveState.GROUND
 	var bob_target: float = clampf(speed / tuning.walk_speed, 0.0, 1.0) if bobbing else 0.0
 	_bob_weight = lerpf(_bob_weight, bob_target, _blend(BOB_FADE_RATE, delta))
 	_bob_phase = fmod(_bob_phase + TAU * tuning.head_bob_frequency * speed / tuning.walk_speed * delta, TAU)
@@ -88,7 +88,7 @@ func _place(origin: Vector3, offset: Vector3) -> void:
 
 
 func _on_landed(impact_speed: float) -> void:
-	var tuning: FPSSettings = body.settings
+	var tuning: PlayerSettings = body.settings
 	var depth: float = minf(impact_speed * tuning.landing_dip_per_speed, tuning.landing_dip_max)
 	# A critically damped spring that starts at rest with velocity v peaks at v / (frequency * e).
 	_dip_velocity -= depth * tuning.landing_dip_frequency * exp(1.0)
@@ -103,13 +103,13 @@ func _step_dip(frequency: float, delta: float) -> void:
 
 
 func _target_eye_height() -> float:
-	var tuning: FPSSettings = body.settings
-	return tuning.crouch_eye_height if body.stance == FPSController.Stance.CROUCH else tuning.stand_eye_height
+	var tuning: PlayerSettings = body.settings
+	return tuning.crouch_eye_height if body.stance == Player.Stance.CROUCH else tuning.stand_eye_height
 
 
 ## Camera3D keeps the vertical FOV fixed, so the horizontal FOV from settings is converted at the 16:9 reference.
 func _target_fov() -> float:
-	var tuning: FPSSettings = body.settings
+	var tuning: PlayerSettings = body.settings
 	var kick_range: float = maxf(tuning.fov_kick_full_speed - tuning.walk_speed, 0.01)
 	var kick: float = clampf((body.horizontal_speed() - tuning.walk_speed) / kick_range, 0.0, 1.0)
 	var horizontal: float = deg_to_rad(tuning.base_fov + tuning.fov_kick_max * kick)

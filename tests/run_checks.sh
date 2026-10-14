@@ -21,7 +21,7 @@ if [[ -e override.cfg ]]; then
 fi
 
 fail_on_output "editor import" godot --headless --path . --editor --quit
-for script in addons/fps_controller/*.gd tests/*.gd; do
+for script in game/player/*.gd tests/*.gd; do
 	fail_on_output "parse $script" godot --headless --path . --check-only -s "$script"
 done
 

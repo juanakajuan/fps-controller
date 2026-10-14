@@ -52,8 +52,8 @@ func run() -> void:
 	quit(1 if failures > 0 else 0)
 
 
-func tuning() -> FPSSettings:
-	var values: FPSSettings = FPSSettings.new()
+func tuning() -> PlayerSettings:
+	var values: PlayerSettings = PlayerSettings.new()
 	values.capsule_radius = 0.35
 	values.stand_height = 1.8
 	values.crouch_height = 1.1
@@ -118,16 +118,16 @@ func add_box(level: Node3D, size: Vector3, center: Vector3, basis: Basis = Basis
 	level.add_child(body)
 
 
-func spawn(level: Node3D, values: FPSSettings, at: Vector3, facing: float) -> FPSController:
-	var player: FPSController = FPSController.new()
+func spawn(level: Node3D, values: PlayerSettings, at: Vector3, facing: float) -> Player:
+	var player: Player = Player.new()
 	player.settings = values
 	player.player_controlled = false
 	level.add_child(player)
 	player.teleport(at, facing)
 	player.jumped.connect(func() -> void: jumps += 1)
 	player.landed.connect(func(impact_speed: float) -> void: landings.append(impact_speed))
-	player.move_state_changed.connect(func(previous: FPSController.MoveState, current: FPSController.MoveState) -> void:
-		transitions.append("%s>%s" % [FPSController.MoveState.find_key(previous), FPSController.MoveState.find_key(current)]))
+	player.move_state_changed.connect(func(previous: Player.MoveState, current: Player.MoveState) -> void:
+		transitions.append("%s>%s" % [Player.MoveState.find_key(previous), Player.MoveState.find_key(current)]))
 	return player
 
 
@@ -143,12 +143,12 @@ func finish(level: Node3D) -> void:
 	clear_events()
 
 
-func press_jump(player: FPSController) -> void:
+func press_jump(player: Player) -> void:
 	player.intent.jump_pressed = true
 	player.intent.jump_held = true
 
 
-func wait_for_state(player: FPSController, state: FPSController.MoveState, limit: int) -> int:
+func wait_for_state(player: Player, state: Player.MoveState, limit: int) -> int:
 	for tick: int in range(1, limit + 1):
 		await physics_frame
 		if player.move_state == state:
@@ -158,9 +158,9 @@ func wait_for_state(player: FPSController, state: FPSController.MoveState, limit
 
 func test_ground_speed() -> void:
 	var level: Node3D = make_level()
-	var player: FPSController = spawn(level, tuning(), Vector3.ZERO, 0.0)
+	var player: Player = spawn(level, tuning(), Vector3.ZERO, 0.0)
 	await frames(5)
-	check(player.move_state == FPSController.MoveState.GROUND and player.horizontal_speed() == 0.0, "Spawned body rests on the floor in GROUND with no speed")
+	check(player.move_state == Player.MoveState.GROUND and player.horizontal_speed() == 0.0, "Spawned body rests on the floor in GROUND with no speed")
 	player.intent.move = Vector2(0.0, 1.0)
 	var ticks_to_ninety: int = -1
 	for tick: int in range(1, 31):
@@ -193,7 +193,7 @@ func test_ground_speed() -> void:
 
 func test_jump_height() -> void:
 	var level: Node3D = make_level()
-	var player: FPSController = spawn(level, tuning(), Vector3.ZERO, 0.0)
+	var player: Player = spawn(level, tuning(), Vector3.ZERO, 0.0)
 	await frames(5)
 	var start_y: float = player.global_position.y
 	press_jump(player)
@@ -210,7 +210,7 @@ func test_jump_height() -> void:
 	check(jumps == 1, "Jump press emits jumped once")
 	check(absf(apex - 1.25) <= 0.0625, "Held jump peaks at 1.25 m within 5%")
 	check(absf(apex_tick * TICK - 0.32) <= 0.034, "Held jump reaches its apex about 0.32 s after the press")
-	check(player.move_state == FPSController.MoveState.GROUND, "Body is back in GROUND one second after the jump")
+	check(player.move_state == Player.MoveState.GROUND, "Body is back in GROUND one second after the jump")
 	player.intent.jump_held = false
 	await frames(5)
 	press_jump(player)
@@ -233,14 +233,14 @@ func test_jump_height() -> void:
 
 func test_air_control() -> void:
 	var level: Node3D = make_level()
-	var player: FPSController = spawn(level, tuning(), Vector3.ZERO, 0.0)
+	var player: Player = spawn(level, tuning(), Vector3.ZERO, 0.0)
 	await frames(5)
 	player.intent.move = Vector2(0.0, 1.0)
 	press_jump(player)
 	var air_speed: float = 0.0
 	for tick: int in range(90):
 		await physics_frame
-		if player.move_state != FPSController.MoveState.AIR:
+		if player.move_state != Player.MoveState.AIR:
 			break
 		air_speed = player.horizontal_speed()
 	measure("air speed from a standing jump with forward held", air_speed, "m/s")
@@ -252,7 +252,7 @@ func test_air_control() -> void:
 	var air_velocity: Vector3 = player.velocity
 	for tick: int in range(90):
 		await physics_frame
-		if player.move_state != FPSController.MoveState.AIR:
+		if player.move_state != Player.MoveState.AIR:
 			break
 		air_velocity = player.velocity
 	var turn: float = rad_to_deg(Vector2(air_velocity.x, -air_velocity.z).angle_to(Vector2(0.0, 1.0)))
@@ -268,17 +268,17 @@ func test_air_control() -> void:
 		player.look(-0.02, 0.0)
 		await physics_frame
 	measure("air strafe speed after 25 ticks from 10.5 m/s", player.horizontal_speed(), "m/s")
-	check(player.move_state == FPSController.MoveState.AIR and player.horizontal_speed() >= 11.0, "Strafing while turning in the air raises speed from 10.5 m/s to at least 11.0 m/s")
+	check(player.move_state == Player.MoveState.AIR and player.horizontal_speed() >= 11.0, "Strafing while turning in the air raises speed from 10.5 m/s to at least 11.0 m/s")
 	await finish(level)
 
 
 func test_coyote_time() -> void:
 	var level: Node3D = make_level()
 	add_box(level, Vector3(10.0, 4.0, 10.0), Vector3(0.0, 2.0, 0.0))
-	var player: FPSController = spawn(level, tuning(), Vector3(0.0, 4.0, 0.0), 0.0)
+	var player: Player = spawn(level, tuning(), Vector3(0.0, 4.0, 0.0), 0.0)
 	await frames(5)
 	player.intent.move = Vector2(0.0, 1.0)
-	var left_at: int = await wait_for_state(player, FPSController.MoveState.AIR, 120)
+	var left_at: int = await wait_for_state(player, Player.MoveState.AIR, 120)
 	check(left_at > 0 and jumps == 0, "Walking off a 4 m ledge enters AIR without a jump")
 	await frames(3)
 	press_jump(player)
@@ -287,12 +287,12 @@ func test_coyote_time() -> void:
 	player.teleport(Vector3(0.0, 4.0, 0.0), 0.0)
 	clear_events()
 	await frames(5)
-	left_at = await wait_for_state(player, FPSController.MoveState.AIR, 120)
+	left_at = await wait_for_state(player, Player.MoveState.AIR, 120)
 	await frames(15)
 	press_jump(player)
 	await frames(2)
 	check(jumps == 0 and player.velocity.y < 0.0, "Jump pressed 0.25 s after leaving the ledge does not jump")
-	await wait_for_state(player, FPSController.MoveState.GROUND, 120)
+	await wait_for_state(player, Player.MoveState.GROUND, 120)
 	await frames(5)
 	check(jumps == 0 and landings.size() == 1, "The late press expires before landing, so the landing does not jump")
 	await finish(level)
@@ -300,14 +300,14 @@ func test_coyote_time() -> void:
 
 func test_jump_buffer() -> void:
 	var level: Node3D = make_level()
-	var player: FPSController = spawn(level, tuning(), Vector3(0.0, 2.5, 0.0), 0.0)
-	check(player.move_state == FPSController.MoveState.AIR, "Teleport to 2.5 m above the floor starts in AIR")
+	var player: Player = spawn(level, tuning(), Vector3(0.0, 2.5, 0.0), 0.0)
+	check(player.move_state == Player.MoveState.AIR, "Teleport to 2.5 m above the floor starts in AIR")
 	press_jump(player)
 	await frames(1)
 	player.intent.jump_held = false
-	await wait_for_state(player, FPSController.MoveState.GROUND, 120)
+	await wait_for_state(player, Player.MoveState.GROUND, 120)
 	await frames(3)
-	check(jumps == 0 and player.move_state == FPSController.MoveState.GROUND, "Jump pressed 0.39 s before landing is not kept until the landing")
+	check(jumps == 0 and player.move_state == Player.MoveState.GROUND, "Jump pressed 0.39 s before landing is not kept until the landing")
 	player.teleport(Vector3(0.0, 2.5, 0.0), 0.0)
 	clear_events()
 	var pressed: bool = false
@@ -331,7 +331,7 @@ func test_jump_buffer() -> void:
 
 func test_sprint_and_slide() -> void:
 	var level: Node3D = make_level()
-	var player: FPSController = spawn(level, tuning(), Vector3.ZERO, 0.0)
+	var player: Player = spawn(level, tuning(), Vector3.ZERO, 0.0)
 	await frames(5)
 	player.intent.move = Vector2(0.0, 1.0)
 	player.intent.sprint_held = true
@@ -341,16 +341,16 @@ func test_sprint_and_slide() -> void:
 	clear_events()
 	player.intent.crouch_held = true
 	await frames(1)
-	check(player.move_state == FPSController.MoveState.SLIDE and player.stance == FPSController.Stance.CROUCH, "Crouch press at sprint speed starts a crouched SLIDE")
+	check(player.move_state == Player.MoveState.SLIDE and player.stance == Player.Stance.CROUCH, "Crouch press at sprint speed starts a crouched SLIDE")
 	var peak: float = player.horizontal_speed()
 	measure("slide speed on the first tick", peak, "m/s")
 	check(peak >= 13.5 and peak <= 14.0, "Slide boost lifts 10.5 m/s to between 13.5 and 14.0 m/s")
-	var slide_ticks: int = await wait_for_state(player, FPSController.MoveState.GROUND, 240)
+	var slide_ticks: int = await wait_for_state(player, Player.MoveState.GROUND, 240)
 	measure("flat slide duration", slide_ticks * TICK, "s")
 	check(slide_ticks * TICK >= 1.5 and slide_ticks * TICK <= 1.6, "A flat slide from 13.89 m/s lasts between 1.5 s and 1.6 s before it drops below 4.0 m/s")
 	check(player.horizontal_speed() < 4.0, "Slide ends when speed drops below 4.0 m/s")
 	check(transitions == ["GROUND>SLIDE", "SLIDE>GROUND"], "move_state_changed reports GROUND>SLIDE then SLIDE>GROUND")
-	check(player.stance == FPSController.Stance.CROUCH, "Body stays crouched after the slide while crouch is held")
+	check(player.stance == Player.Stance.CROUCH, "Body stays crouched after the slide while crouch is held")
 	player.intent.crouch_held = false
 	player.intent.sprint_held = true
 	await frames(60)
@@ -367,7 +367,7 @@ func test_sprint_and_slide() -> void:
 
 func test_slide_jump_and_landing_slide() -> void:
 	var level: Node3D = make_level()
-	var player: FPSController = spawn(level, tuning(), Vector3.ZERO, 0.0)
+	var player: Player = spawn(level, tuning(), Vector3.ZERO, 0.0)
 	await frames(5)
 	player.intent.move = Vector2(0.0, 1.0)
 	player.intent.sprint_held = true
@@ -382,7 +382,7 @@ func test_slide_jump_and_landing_slide() -> void:
 	measure("speed 0.25 s after a slide jump", player.horizontal_speed(), "m/s")
 	check(transitions == ["SLIDE>AIR"] and player.horizontal_speed() > 12.5, "Jumping out of a slide carries more than 12.5 m/s into the air")
 	check(absf(player.horizontal_speed() - takeoff) < 0.05, "Holding forward in the air after a slide jump loses no horizontal speed")
-	await wait_for_state(player, FPSController.MoveState.SLIDE, 90)
+	await wait_for_state(player, Player.MoveState.SLIDE, 90)
 	check(transitions == ["SLIDE>AIR", "AIR>SLIDE"] and landings.size() == 1, "Landing with crouch held at slide speed goes straight into SLIDE and emits landed")
 	await finish(level)
 
@@ -392,8 +392,8 @@ func test_stairs() -> void:
 	add_box(level, Vector3(4.0, 0.3, 10.0), Vector3(0.0, 0.15, -8.0))
 	add_box(level, Vector3(4.0, 0.35, 10.0), Vector3(10.0, 0.175, -8.0))
 	add_box(level, Vector3(4.0, 0.6, 10.0), Vector3(20.0, 0.3, -8.0))
-	var values: FPSSettings = tuning()
-	var player: FPSController = spawn(level, values, Vector3(0.0, 0.0, 2.0), 0.0)
+	var values: PlayerSettings = tuning()
+	var player: Player = spawn(level, values, Vector3(0.0, 0.0, 2.0), 0.0)
 	await frames(5)
 	player.intent.move = Vector2(0.0, 1.0)
 	var entered: int = -1
@@ -442,7 +442,7 @@ func test_staircases() -> void:
 	var level: Node3D = make_level()
 	add_staircase(level, 0.0, 0.2, 0.3, 8)
 	add_staircase(level, 5.0, 0.35, 0.35, 5)
-	var player: FPSController = spawn(level, tuning(), Vector3(0.0, 0.0, 0.0), 0.0)
+	var player: Player = spawn(level, tuning(), Vector3(0.0, 0.0, 0.0), 0.0)
 	player.intent.move = Vector2(0.0, 1.0)
 	player.intent.crouch_held = true
 	await frames(180)
@@ -464,26 +464,26 @@ func test_staircases() -> void:
 func test_ceiling() -> void:
 	var level: Node3D = make_level()
 	add_box(level, Vector3(4.0, 0.3, 6.0), Vector3(0.0, 1.45, -6.0))
-	var player: FPSController = spawn(level, tuning(), Vector3.ZERO, 0.0)
+	var player: Player = spawn(level, tuning(), Vector3.ZERO, 0.0)
 	await frames(5)
 	player.intent.move = Vector2(0.0, 1.0)
 	player.intent.crouch_held = true
 	await frames(75)
-	check(player.global_position.z < -3.4 and player.stance == FPSController.Stance.CROUCH, "Crouched body walks under the 1.3 m ceiling")
+	check(player.global_position.z < -3.4 and player.stance == Player.Stance.CROUCH, "Crouched body walks under the 1.3 m ceiling")
 	player.intent.crouch_held = false
 	await frames(10)
-	check(player.stance == FPSController.Stance.CROUCH and absf(player.global_position.y) < 0.02, "Releasing crouch under the ceiling keeps the body crouched on the floor")
+	check(player.stance == Player.Stance.CROUCH and absf(player.global_position.y) < 0.02, "Releasing crouch under the ceiling keeps the body crouched on the floor")
 	for tick: int in range(150):
 		await physics_frame
 		if player.global_position.z < -9.5:
 			break
 	await frames(2)
-	check(player.global_position.z < -9.5 and player.stance == FPSController.Stance.STAND, "Body stands up after it clears the ceiling")
+	check(player.global_position.z < -9.5 and player.stance == Player.Stance.STAND, "Body stands up after it clears the ceiling")
 	await finish(level)
 
 
-func start_slide(level: Node3D, at: Vector3, facing: float) -> FPSController:
-	var player: FPSController = spawn(level, tuning(), at, facing)
+func start_slide(level: Node3D, at: Vector3, facing: float) -> Player:
+	var player: Player = spawn(level, tuning(), at, facing)
 	await frames(5)
 	player.intent.move = Vector2(0.0, 1.0)
 	player.intent.sprint_held = true
@@ -495,22 +495,22 @@ func start_slide(level: Node3D, at: Vector3, facing: float) -> FPSController:
 
 func test_slope_slide() -> void:
 	var flat: Node3D = make_level()
-	var flat_player: FPSController = await start_slide(flat, Vector3.ZERO, 0.0)
+	var flat_player: Player = await start_slide(flat, Vector3.ZERO, 0.0)
 	var flat_entry: float = flat_player.horizontal_speed()
 	await frames(30)
 	var flat_speed: float = flat_player.horizontal_speed()
-	var flat_sliding: bool = flat_player.move_state == FPSController.MoveState.SLIDE
+	var flat_sliding: bool = flat_player.move_state == Player.MoveState.SLIDE
 	await finish(flat)
 	var hill: Node3D = make_level()
 	var slope: float = deg_to_rad(20.0)
 	add_box(hill, Vector3(6.0, 1.0, 40.0), Vector3(0.0, 0.0, 0.0), Basis(Vector3.RIGHT, slope))
 	var top_z: float = -15.0
 	var top_y: float = -top_z * tan(slope) + 0.5 / cos(slope)
-	var ramp_player: FPSController = await start_slide(hill, Vector3(0.0, top_y + 0.05, top_z), PI)
+	var ramp_player: Player = await start_slide(hill, Vector3(0.0, top_y + 0.05, top_z), PI)
 	var ramp_entry: float = ramp_player.horizontal_speed()
 	await frames(30)
 	var ramp_speed: float = ramp_player.horizontal_speed()
-	var ramp_sliding: bool = ramp_player.move_state == FPSController.MoveState.SLIDE
+	var ramp_sliding: bool = ramp_player.move_state == Player.MoveState.SLIDE
 	measure("flat slide entry speed", flat_entry, "m/s")
 	measure("flat slide speed 0.5 s after entry", flat_speed, "m/s")
 	measure("20 degree downhill slide entry speed", ramp_entry, "m/s")
@@ -522,7 +522,7 @@ func test_slope_slide() -> void:
 
 func test_landed_signal() -> void:
 	var level: Node3D = make_level()
-	var player: FPSController = spawn(level, tuning(), Vector3(0.0, 2.0, 0.0), 0.0)
+	var player: Player = spawn(level, tuning(), Vector3(0.0, 2.0, 0.0), 0.0)
 	await frames(60)
 	measure("impact speed after a 2 m drop", landings[0] if landings.size() > 0 else 0.0, "m/s")
 	check(landings.size() == 1 and landings[0] > 10.5 and landings[0] < 12.5, "A 2 m drop emits landed once with an impact speed near 11.5 m/s")
@@ -534,7 +534,7 @@ func test_landed_signal() -> void:
 
 func test_camera_rig() -> void:
 	var level: Node3D = make_level()
-	var player: FPSController = spawn(level, tuning(), Vector3(3.0, 0.0, 4.0), 0.0)
+	var player: Player = spawn(level, tuning(), Vector3(3.0, 0.0, 4.0), 0.0)
 	check(player.camera.global_position.distance_to(Vector3(3.0, 1.65, 4.0)) < 0.01, "Spawn teleport places the camera at eye height with no smoothing")
 	await frames(30)
 	player.teleport(Vector3(-20.0, 0.0, 10.0), 0.0)
@@ -562,10 +562,10 @@ func test_camera_rig() -> void:
 func test_camera_on_stairs() -> void:
 	var level: Node3D = make_level()
 	add_staircase(level, 0.0, 0.3, 0.6, 20)
-	var values: FPSSettings = tuning()
+	var values: PlayerSettings = tuning()
 	# The head bob moves the camera down on purpose, so it is off to isolate the step.
 	values.head_bob_enabled = false
-	var player: FPSController = spawn(level, values, Vector3.ZERO, 0.0)
+	var player: Player = spawn(level, values, Vector3.ZERO, 0.0)
 	await frames(5)
 	var previous_max_fps: int = Engine.max_fps
 	Engine.max_fps = 240
@@ -593,7 +593,7 @@ func test_camera_on_stairs() -> void:
 
 func test_player_input() -> void:
 	var level: Node3D = make_level()
-	var player: FPSController = FPSController.new()
+	var player: Player = Player.new()
 	player.settings = tuning()
 	level.add_child(player)
 	player.teleport(Vector3.ZERO, 0.0)

@@ -1,4 +1,4 @@
-class_name FPSController
+class_name Player
 extends CharacterBody3D
 
 enum MoveState { GROUND, AIR, SLIDE }
@@ -24,7 +24,7 @@ const STEP_CLEARANCE: float = 0.05
 const MIN_STEP: float = 0.01
 const STEP_PROBE: float = 0.1
 
-@export var settings: FPSSettings
+@export var settings: PlayerSettings
 @export var player_controlled: bool = true
 @export_range(0.001, 2.0, 0.001, "suffix:°/px") var mouse_sensitivity: float = 0.1
 @export_range(1.0, 1080.0, 1.0, "suffix:°/s") var gamepad_look_speed: float = 240.0
@@ -39,7 +39,7 @@ var move_state: MoveState = MoveState.AIR
 var stance: Stance = Stance.STAND
 var camera: Camera3D
 
-var _rig: FPSCameraRig
+var _rig: PlayerCameraRig
 var _shape: CapsuleShape3D
 var _collision: CollisionShape3D
 var _coyote_left: float = 0.0
@@ -53,7 +53,7 @@ var _on_floor: bool = false
 
 func _ready() -> void:
 	if settings == null:
-		settings = FPSSettings.new()
+		settings = PlayerSettings.new()
 	floor_max_angle = deg_to_rad(settings.floor_max_angle_degrees)
 	floor_constant_speed = true
 	floor_snap_length = settings.step_height
@@ -64,7 +64,7 @@ func _ready() -> void:
 	_collision.shape = _shape
 	add_child(_collision)
 	_apply_stance_shape()
-	_rig = FPSCameraRig.new()
+	_rig = PlayerCameraRig.new()
 	_rig.name = "CameraRig"
 	_rig.body = self
 	add_child(_rig)

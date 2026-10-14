@@ -1,4 +1,4 @@
-class_name FPSSettings
+class_name PlayerSettings
 extends Resource
 
 @export_group("Body")

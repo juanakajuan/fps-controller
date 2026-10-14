@@ -4,7 +4,7 @@ config_version=5
 
 [application]
 
-config/name="FPS Controller"
+config/name="Hold the Yard"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
 [debug]
