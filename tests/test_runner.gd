@@ -55,9 +55,11 @@ func run() -> void:
 	await test_player_input()
 	await test_player_health()
 	await test_weapon()
+	await test_melee()
 	await test_arena_navigation()
 	await test_zombie()
 	await test_game()
+	await test_game_melee()
 	print("RESULT: %d checks, %d failures" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -778,11 +780,11 @@ func make_zombie(level: Node3D, at: Vector3, start_health: float, move_speed: fl
 
 
 ## A zombie whose target is a marker at its own feet stands still in ATTACK.
-func make_still_zombie(level: Node3D, at: Vector3) -> Zombie:
+func make_still_zombie(level: Node3D, at: Vector3, start_health: float = 150.0) -> Zombie:
 	var marker: Marker3D = Marker3D.new()
 	marker.position = at
 	level.add_child(marker)
-	return make_zombie(level, at, 150.0, 1.6, marker)
+	return make_zombie(level, at, start_health, 1.6, marker)
 
 
 func test_weapon() -> void:
@@ -847,6 +849,80 @@ func test_weapon() -> void:
 	check(weapon.state == Weapon.State.RELOADING and weapon.magazine == 7, "A reload request with 7 of 8 rounds starts a reload")
 	weapon.refill()
 	check(weapon.state == Weapon.State.READY and weapon.magazine == 8 and weapon.reserve == 80, "refill() ends the reload and fills the magazine and the reserve")
+	await finish(level)
+
+
+func wait_for_weapon_state(weapon: Weapon, state: Weapon.State, limit: int) -> int:
+	for tick: int in range(1, limit + 1):
+		await physics_frame
+		if weapon.state == state:
+			return tick
+	return -1
+
+
+func test_melee() -> void:
+	var level: Node3D = make_level()
+	add_box(level, Vector3(0.2, 3.0, 4.0), Vector3(0.8, 1.5, 0.0))
+	var player: Player = spawn(level, tuning(), Vector3.ZERO, 0.0)
+	var weapon: Weapon = Weapon.new()
+	weapon.def = WeaponDef.starting_pistol()
+	weapon.def.spread_degrees = 0.0
+	player.camera.add_child(weapon)
+	var ahead: Zombie = make_still_zombie(level, Vector3(0.0, 0.0, -1.5), 1000.0)
+	var behind_wall: Zombie = make_still_zombie(level, Vector3(1.6, 0.0, 0.0), 1000.0)
+	var far: Zombie = make_still_zombie(level, Vector3(-3.0, 0.0, 0.0), 1000.0)
+	var names: Dictionary[Zombie, String] = {ahead: "ahead", behind_wall: "behind wall", far: "far"}
+	var shots: Array[int] = [0]
+	var hits: Array[String] = []
+	var reloads: Array[String] = []
+	weapon.fired.connect(func() -> void: shots[0] += 1)
+	weapon.hit.connect(func(target: Zombie, damage: float, kind: Rules.HitKind) -> void:
+		hits.append("%s %.1f %s" % [names[target], damage, Rules.HitKind.find_key(kind)]))
+	weapon.reload_started.connect(func() -> void: reloads.append("started"))
+	weapon.reload_finished.connect(func() -> void: reloads.append("finished"))
+	await frames(5)
+	weapon.melee_requested = true
+	await frames(1)
+	check(weapon.state == Weapon.State.MELEE and hits == ["ahead 150.0 MELEE"], "A melee hits the zombie 1.5 m ahead once for 150 damage")
+	weapon.trigger_held = true
+	await frames(9)
+	weapon.melee_requested = true
+	var shots_in_melee: int = -1
+	var hits_in_melee: int = -1
+	var melee_ticks: int = 10
+	for tick: int in range(60):
+		await physics_frame
+		if weapon.state != Weapon.State.MELEE:
+			break
+		shots_in_melee = shots[0]
+		hits_in_melee = hits.size()
+		melee_ticks += 1
+	weapon.trigger_held = false
+	measure("melee time", melee_ticks * TICK, "s")
+	check(melee_ticks == 36, "MELEE lasts 36 ticks, which is 0.6 s, and a second melee request during MELEE does not make it longer")
+	check(shots_in_melee == 0 and hits_in_melee == 1, "A held trigger does not fire during MELEE, and the second melee request does not hit")
+	check(shots[0] == 1 and weapon.magazine == 7 and hits == ["ahead 150.0 MELEE", "ahead 70.0 HEAD"], "The press held through MELEE fires once when MELEE ends")
+	player.look(-PI * 0.5, 0.0)
+	await frames(12)
+	weapon.melee_requested = true
+	await frames(1)
+	check(weapon.state == Weapon.State.MELEE and hits.size() == 2, "A wall between the player and a zombie 1.6 m away blocks the melee")
+	player.look(PI, 0.0)
+	await frames(40)
+	weapon.melee_requested = true
+	await frames(1)
+	check(weapon.state == Weapon.State.MELEE and hits.size() == 2, "A melee does not hit the zombie 3 m away")
+	await wait_for_weapon_state(weapon, Weapon.State.READY, 40)
+	weapon.reload_requested = true
+	await frames(30)
+	check(weapon.state == Weapon.State.RELOADING and reloads == ["started"], "A reload request with 7 of 8 rounds starts a reload")
+	weapon.melee_requested = true
+	await frames(1)
+	check(weapon.state == Weapon.State.MELEE and weapon.magazine == 7 and weapon.reserve == 80, "A melee interrupts the reload and leaves 7 in the magazine and 80 in reserve")
+	var restarted_after: int = await wait_for_weapon_state(weapon, Weapon.State.RELOADING, 40)
+	check(restarted_after == 36 and reloads == ["started", "started"], "The reload starts again on the tick that MELEE ends")
+	var finished_after: int = await wait_for_weapon_state(weapon, Weapon.State.READY, 120)
+	check(finished_after == 84 and weapon.magazine == 8 and weapon.reserve == 79 and reloads == ["started", "started", "finished"], "The restarted reload takes the full 84 ticks and loads 1 round from the reserve")
 	await finish(level)
 
 
@@ -917,6 +993,11 @@ func start_game() -> Game:
 	return game
 
 
+## Puts the zombie on the floor in front of the player, so that a level melee hits it.
+func place_in_front(game: Game, zombie: Zombie, distance: float) -> void:
+	zombie.global_position = game.player.global_position + Vector3.FORWARD.rotated(Vector3.UP, game.player.yaw) * distance
+
+
 func live_zombies(game: Game) -> Array[Zombie]:
 	var found: Array[Zombie] = []
 	for child: Node in game.zombies.get_children():
@@ -974,6 +1055,11 @@ func test_game() -> void:
 	check(game.director.round_number == 2 and game.weapon.magazine == 8 and game.hud.round_label.text == "2", "Round 2 starts after the intermission, refills the weapon, and shows round 2")
 	var second: Zombie = live_zombies(game)[0]
 	check(second.health == 250.0, "A round 2 zombie has 250 health")
+	place_in_front(game, second, 1.5)
+	await frames(2)
+	game.weapon.melee_requested = true
+	await frames(1)
+	check(second.health == 100.0 and second.state != Zombie.State.DEAD and game.points.balance == 920, "A melee on a 250 health zombie does 150 damage and earns 10 points")
 	send_action(&"pause")
 	await frames(30)
 	var paused_position: Vector3 = second.global_position
@@ -985,7 +1071,7 @@ func test_game() -> void:
 	game.player.take_damage(100.0)
 	await frames(1)
 	check(game.director.phase == RoundDirector.Phase.GAME_OVER and game.hud.death_screen.visible, "Player death ends the game and shows the death screen")
-	check(game.hud.death_text.text.begins_with("You survived 1 round.\nYou earned 410 points."), "The death screen shows 1 round survived and 410 points earned")
+	check(game.hud.death_text.text.begins_with("You survived 1 round.\nYou earned 420 points."), "The death screen shows 1 round survived and 420 points earned")
 	check(Input.mouse_mode == Input.MOUSE_MODE_VISIBLE, "Death releases the mouse")
 	var spawned_after: int = game.zombies.get_child_count()
 	await frames(150)
@@ -997,4 +1083,22 @@ func test_game() -> void:
 	check(fresh.director.phase == RoundDirector.Phase.STARTING and fresh.points.balance == 500 and fresh.player.alive, "The new game starts over with 500 points and a living player")
 	current_scene = null
 	fresh.queue_free()
+	await physics_frame
+
+
+func test_game_melee() -> void:
+	var game: Game = start_game()
+	for tick: int in range(240):
+		await physics_frame
+		if game.director.phase == RoundDirector.Phase.ACTIVE:
+			break
+	var first: Zombie = live_zombies(game)[0]
+	place_in_front(game, first, 1.5)
+	await frames(2)
+	game.weapon.melee_requested = true
+	await frames(1)
+	check(first.state == Zombie.State.DEAD and game.points.balance == 630 and game.hud.points_label.text == "630", "One melee kills a round 1 zombie and earns 130 points")
+	check(game.weapon.magazine == 8 and game.weapon.reserve == 80, "The melee uses no ammunition")
+	current_scene = null
+	game.queue_free()
 	await physics_frame

@@ -1,7 +1,7 @@
 class_name Weapon
 extends Node3D
 
-enum State { READY, COOLDOWN, RELOADING }
+enum State { READY, COOLDOWN, RELOADING, MELEE }
 
 signal fired
 signal hit(target: Zombie, damage: float, kind: Rules.HitKind)
@@ -12,6 +12,7 @@ signal reload_finished
 const VIEW_OFFSET: Vector3 = Vector3(0.16, -0.15, -0.36)
 const RECOIL_KICK: float = 0.05
 const RECOIL_RECOVERY: float = 18.0
+const MELEE_THRUST: float = 0.22
 const FLASH_SECONDS: float = 0.05
 const METAL_COLOR: Color = Color(0.16, 0.17, 0.19)
 const GRIP_COLOR: Color = Color(0.32, 0.22, 0.14)
@@ -25,6 +26,8 @@ var reserve: int = 0
 var trigger_held: bool = false
 ## Kept until the weapon is READY, then cleared, so a press during the cooldown is not lost.
 var reload_requested: bool = false
+## One tick. The game writes this from input. Tests write it directly.
+var melee_requested: bool = false
 
 var _time_left: float = 0.0
 var _trigger_was_held: bool = false
@@ -59,6 +62,8 @@ func _physics_process(delta: float) -> void:
 	if not trigger_held:
 		_press_pending = false
 	_trigger_was_held = trigger_held
+	var melee: bool = melee_requested
+	melee_requested = false
 	match state:
 		State.COOLDOWN:
 			_time_left -= delta
@@ -68,7 +73,13 @@ func _physics_process(delta: float) -> void:
 			_time_left -= delta
 			if _time_left <= 0.0:
 				_finish_reload()
-	if state == State.READY:
+		State.MELEE:
+			_time_left -= delta
+			if _time_left <= 0.0:
+				state = State.READY
+	if melee and state != State.MELEE:
+		_melee()
+	elif state == State.READY:
 		if magazine == 0 or (reload_requested and magazine < def.magazine_size):
 			_start_reload()
 		elif _press_pending or (def.automatic and trigger_held):
@@ -81,7 +92,10 @@ func _process(delta: float) -> void:
 	var dip: float = 0.0
 	if state == State.RELOADING:
 		dip = sin(PI * (1.0 - _time_left / def.reload_seconds))
-	_model.position = VIEW_OFFSET + Vector3(0.0, -0.12 * dip, _recoil)
+	var thrust: float = 0.0
+	if state == State.MELEE:
+		thrust = sin(PI * (1.0 - _time_left / Rules.MELEE_SECONDS))
+	_model.position = VIEW_OFFSET + Vector3(-0.08 * thrust, -0.12 * dip, _recoil - MELEE_THRUST * thrust)
 	_model.rotation = Vector3(_recoil * 4.0 - dip * 0.7, 0.0, dip * 0.4)
 	_flash_left -= delta
 	_flash.visible = _flash_left > 0.0
@@ -115,6 +129,20 @@ func _fire() -> void:
 	fired.emit()
 	ammo_changed.emit(magazine, reserve)
 	_cast_ray()
+
+
+## An interrupted reload starts again from the beginning when the melee ends.
+func _melee() -> void:
+	if state == State.RELOADING:
+		reload_requested = true
+	state = State.MELEE
+	_time_left = Rules.MELEE_SECONDS
+	var view: Transform3D = (get_parent() as Node3D).global_transform
+	var query: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(view.origin, view.origin - view.basis.z * Rules.MELEE_RANGE, Layers.WORLD | Layers.ZOMBIES)
+	var collider: Object = get_world_3d().direct_space_state.intersect_ray(query).get("collider")
+	var target: Zombie = collider as Zombie
+	if target != null:
+		hit.emit(target, Rules.MELEE_DAMAGE, Rules.HitKind.MELEE)
 
 
 ## The ray starts at the camera, the parent of this node. Its mask has no player layer, so the shooter is never hit.

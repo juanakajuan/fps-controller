@@ -52,6 +52,8 @@ func _physics_process(delta: float) -> void:
 		weapon.trigger_held = Input.is_action_pressed(&"fire")
 		if Input.is_action_just_pressed(&"reload"):
 			weapon.reload_requested = true
+		if Input.is_action_just_pressed(&"melee"):
+			weapon.melee_requested = true
 	elif not player.alive:
 		weapon.trigger_held = false
 	for spawn: int in range(director.tick(delta)):
@@ -120,6 +122,7 @@ func _on_game_over(rounds_survived: int) -> void:
 func _register_actions() -> void:
 	_add_action(&"fire", [_mouse(MOUSE_BUTTON_LEFT), _joy_axis(JOY_AXIS_TRIGGER_RIGHT)])
 	_add_action(&"reload", [_key(KEY_R), _joy_button(JOY_BUTTON_X)])
+	_add_action(&"melee", [_key(KEY_V), _joy_button(JOY_BUTTON_RIGHT_STICK)])
 	_add_action(&"pause", [_key(KEY_ESCAPE), _joy_button(JOY_BUTTON_START)])
 	_add_action(&"restart", [_key(KEY_ENTER), _key(KEY_KP_ENTER), _joy_button(JOY_BUTTON_START)])
 
