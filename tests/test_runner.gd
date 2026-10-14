@@ -33,6 +33,11 @@ func frames(count: int) -> void:
 
 func run() -> void:
 	print("Physics engine setting: %s" % str(ProjectSettings.get_setting("physics/3d/physics_engine")))
+	test_rules()
+	test_round_director_start()
+	test_round_director_spawn_cap()
+	test_round_director_game_over()
+	test_points()
 	await test_ground_speed()
 	await test_jump_height()
 	await test_air_control()
@@ -611,3 +616,113 @@ func test_player_input() -> void:
 	measure("gamepad turn in 0.5 s at full stick", turned, "deg")
 	check(turned > 100.0 and turned < 140.0, "Full right stick turns the view right by about 120 degrees in 0.5 s (240 degrees per second)")
 	await finish(level)
+
+
+func test_rules() -> void:
+	check([Rules.zombie_count(1), Rules.zombie_count(2), Rules.zombie_count(5), Rules.zombie_count(6), Rules.zombie_count(10), Rules.zombie_count(20)] == [6, 9, 18, 27, 53, 153], "Zombie counts for rounds 1, 2, 5, 6, 10, 20 are 6, 9, 18, 27, 53, 153")
+	check([Rules.zombie_health(1), Rules.zombie_health(2), Rules.zombie_health(5), Rules.zombie_health(9)] == [150.0, 250.0, 550.0, 950.0], "Zombie health for rounds 1, 2, 5, 9 is 150, 250, 550, 950")
+	check(is_equal_approx(Rules.zombie_health(10), 1045.0) and absf(Rules.zombie_health(20) - 2710.46) < 0.01, "Zombie health grows 10% per round after round 9: 1045 at round 10 and 2710.46 at round 20")
+	check([Rules.spawn_interval(1), Rules.spawn_interval(2), Rules.spawn_interval(5), Rules.spawn_interval(20)] == [2.0, 1.85, 1.4, 0.5] and is_equal_approx(Rules.spawn_interval(10), 0.65), "Spawn intervals for rounds 1, 2, 5, 10, 20 are 2.0, 1.85, 1.4, 0.65, 0.5 s")
+	var rolls: Array[float] = [0.0, 0.1, 0.3, 0.5, 0.9, 0.99]
+	var round_one: Array[float] = []
+	var round_five: Array[float] = []
+	var round_ten: Array[float] = []
+	for roll: float in rolls:
+		round_one.append(Rules.zombie_speed(1, roll))
+		round_five.append(Rules.zombie_speed(5, roll))
+		round_ten.append(Rules.zombie_speed(10, roll))
+	check(round_one == [1.6, 1.6, 1.6, 1.6, 1.6, 1.6], "Round 1 has only walkers at 1.6 m/s")
+	check(round_five == [5.0, 5.0, 3.2, 3.2, 1.6, 1.6], "Round 5 has 24% runners, 60% joggers, and 16% walkers")
+	check(round_ten == [5.0, 5.0, 5.0, 5.0, 3.2, 3.2], "Round 10 has 80% runners and 20% joggers")
+	check([Rules.points_for_hit(false, false), Rules.points_for_hit(false, true), Rules.points_for_hit(true, false), Rules.points_for_hit(true, true)] == [10, 10, 60, 100], "A hit earns 10, a kill 60, and a headshot kill 100")
+
+
+func clear_round(director: RoundDirector) -> void:
+	while director.phase == RoundDirector.Phase.ACTIVE:
+		director.tick(0.25)
+		for zombie: int in range(director.alive):
+			director.zombie_died()
+
+
+func test_round_director_start() -> void:
+	var director: RoundDirector = RoundDirector.new()
+	var events: Array[String] = []
+	director.round_started.connect(func(number: int) -> void: events.append("started %d" % number))
+	director.round_cleared.connect(func(number: int) -> void: events.append("cleared %d" % number))
+	var early: int = director.tick(2.5)
+	check(early == 0 and director.phase == RoundDirector.Phase.STARTING and director.rounds_survived() == 0, "2.5 s after the start the director is STARTING, spawns nothing, and has 0 rounds survived")
+	var first: int = director.tick(0.5)
+	check(first == 1 and director.phase == RoundDirector.Phase.ACTIVE and director.round_number == 1 and director.to_spawn == 5 and director.alive == 1, "At 3.0 s round 1 starts and spawns its first zombie, with 5 left to spawn")
+	var spawned: Array[int] = []
+	for step: int in range(4):
+		spawned.append(director.tick(0.5))
+	check(spawned == [0, 0, 0, 1], "The next zombie comes 2.0 s later")
+	director.tick(10.0)
+	check(director.to_spawn == 0 and director.alive == 6, "A 10 s tick spawns the rest of round 1, so 6 zombies are alive")
+	for zombie: int in range(5):
+		director.zombie_died()
+	check(director.phase == RoundDirector.Phase.ACTIVE and director.rounds_survived() == 0, "With one zombie alive round 1 is still ACTIVE and 0 rounds are survived")
+	director.zombie_died()
+	check(director.phase == RoundDirector.Phase.INTERMISSION and director.rounds_survived() == 1, "The last death clears round 1 into INTERMISSION with 1 round survived")
+	check(director.tick(9.5) == 0 and director.phase == RoundDirector.Phase.INTERMISSION, "9.5 s into the intermission there is no new round")
+	check(director.tick(0.5) == 1 and director.round_number == 2 and director.to_spawn == 8, "10 s after the clear round 2 starts with 9 zombies")
+	check(director.rounds_survived() == 1, "During round 2, 1 round is survived")
+	check(events == ["started 1", "cleared 1", "started 2"], "Signals are round_started 1, round_cleared 1, round_started 2")
+
+
+func test_round_director_spawn_cap() -> void:
+	var director: RoundDirector = RoundDirector.new()
+	director.tick(3.0)
+	for number: int in range(1, 7):
+		clear_round(director)
+		director.tick(10.0)
+	check(director.round_number == 7 and director.to_spawn + director.alive == 33, "After six cleared rounds round 7 has 33 zombies")
+	var most_alive: int = 0
+	var total: int = director.alive
+	for step: int in range(2400):
+		total += director.tick(1.0 / 60.0)
+		most_alive = maxi(most_alive, director.alive)
+	check(most_alive == 24 and director.alive == 24 and director.to_spawn == 9 and total == 24, "With no deaths in round 7, spawns stop at 24 alive and 9 wait")
+	director.zombie_died()
+	director.zombie_died()
+	var at_once: int = director.tick(1.0 / 60.0)
+	var later: int = 0
+	for step: int in range(70):
+		later += director.tick(1.0 / 60.0)
+	check(at_once == 1 and later == 1 and director.alive == 24 and director.to_spawn == 7, "After two deaths at the cap, one zombie spawns on the next tick and one 1.1 s later")
+
+
+func test_round_director_game_over() -> void:
+	var director: RoundDirector = RoundDirector.new()
+	var results: Array[int] = []
+	director.game_over.connect(func(survived: int) -> void: results.append(survived))
+	director.tick(3.0)
+	clear_round(director)
+	director.tick(10.0)
+	director.tick(5.0)
+	director.player_died()
+	director.player_died()
+	check(director.phase == RoundDirector.Phase.GAME_OVER and results == [1], "A death in round 2 ends the game once with 1 round survived")
+	check(director.tick(30.0) == 0 and director.round_number == 2, "After GAME_OVER, tick spawns nothing and no round starts")
+	var in_break: RoundDirector = RoundDirector.new()
+	var break_results: Array[int] = []
+	in_break.game_over.connect(func(survived: int) -> void: break_results.append(survived))
+	in_break.tick(3.0)
+	clear_round(in_break)
+	in_break.player_died()
+	check(break_results == [1], "A death in the intermission after round 1 reports 1 round survived")
+	var at_start: RoundDirector = RoundDirector.new()
+	at_start.player_died()
+	check(at_start.rounds_survived() == 0 and at_start.phase == RoundDirector.Phase.GAME_OVER, "A death before round 1 reports 0 rounds survived")
+
+
+func test_points() -> void:
+	var points: Points = Points.new()
+	var balances: Array[int] = []
+	points.changed.connect(func(balance: int) -> void: balances.append(balance))
+	points.earn(60)
+	points.earn(10)
+	check(points.balance == 570 and points.earned == 70, "Earning 60 and 10 from 500 gives a balance of 570 and 70 earned")
+	check(points.spend(400) and points.balance == 170 and points.earned == 70, "Spending 400 of 570 succeeds and leaves 170, and earned stays 70")
+	check(not points.spend(171) and points.balance == 170, "Spending 171 of 170 fails and leaves the balance at 170")
+	check(balances == [560, 570, 170], "changed reports 560, 570, 170 and nothing for the failed spend")

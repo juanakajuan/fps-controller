@@ -278,4 +278,7 @@ Headless tests with literal expected values:
 
 ## Accepted deviations
 
-None yet.
+- `Rules.points_for_hit(killed, headshot)` is added. The points for a hit are a rule, so the rule lives in `Rules` and the test asserts it without a scene.
+- `Rules.WALKER_SPEED`, `JOGGER_SPEED`, and `RUNNER_SPEED` name the three speeds of `zombie_speed`.
+- `RoundDirector` has a `TRANSITIONS` table and a private `_rounds_cleared`. `_enter()` asserts each phase change against the table. `rounds_survived()` returns `_rounds_cleared`, because in GAME_OVER the phase no longer tells if the last round was cleared. The values are the same as in the design: 0 before round 1, `round_number - 1` while ACTIVE, `round_number` in INTERMISSION.
+- A new round spawns its first zombie on the tick that starts it. Later spawns come one `spawn_interval` apart. A spawn that `MAX_ALIVE` holds back goes out on the first tick after a death, and the next one waits a full interval, so a long hold does not release a burst.

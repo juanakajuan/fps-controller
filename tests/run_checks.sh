@@ -15,22 +15,33 @@ fail_on_output() {
 	echo "OK: $label"
 }
 
+run_suite() {
+	local engine="$1"
+	local output
+	local status=0
+	output="$(godot --headless --path . -s tests/test_runner.gd 2>&1)" || status=$?
+	echo "Test suite on $engine:"
+	grep -E 'RESULT|FAIL|SCRIPT ERROR' <<<"$output" || true
+	if [[ $status -ne 0 ]] || ! grep -q 'RESULT: [0-9]* checks, 0 failures' <<<"$output"; then
+		echo "FAIL: test suite on $engine"
+		exit 1
+	fi
+}
+
 if [[ -e override.cfg ]]; then
 	echo "override.cfg exists. Move it away, then run the checks again."
 	exit 1
 fi
 
 fail_on_output "editor import" godot --headless --path . --editor --quit
-for script in game/player/*.gd tests/*.gd; do
+for script in $(find game tests -name '*.gd' | sort); do
 	fail_on_output "parse $script" godot --headless --path . --check-only -s "$script"
 done
 
-echo "Test suite on Jolt Physics:"
-godot --headless --path . -s tests/test_runner.gd 2>&1 | grep -E 'RESULT|FAIL|SCRIPT ERROR'
+run_suite "Jolt Physics"
 
 trap 'rm -f override.cfg' EXIT
 printf '[physics]\n\n3d/physics_engine="GodotPhysics3D"\n' >override.cfg
-echo "Test suite on Godot Physics:"
-godot --headless --path . -s tests/test_runner.gd 2>&1 | grep -E 'RESULT|FAIL|SCRIPT ERROR'
+run_suite "Godot Physics"
 rm -f override.cfg
 
