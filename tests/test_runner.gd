@@ -40,6 +40,8 @@ func run() -> void:
 	test_points()
 	test_arsenal()
 	test_loadout()
+	test_wall_buy_offer()
+	test_mystery_box()
 	await test_ground_speed()
 	await test_jump_height()
 	await test_air_control()
@@ -707,6 +709,59 @@ func test_loadout() -> void:
 	check(not after_shots and rifle.is_full() and slot_text(rifle) == "rifle 15/90", "A slot with an empty reserve is not full, and fill() gives 15 and 90")
 
 
+func offer_text(offer: Station.Offer) -> String:
+	return "%s %d \"%s\" %s" % [Station.Offer.Kind.find_key(offer.kind), offer.cost, offer.label, offer.weapon.id if offer.weapon != null else &"-"]
+
+
+func test_wall_buy_offer() -> void:
+	var wall: WallBuy = WallBuy.new(Arsenal.smg(), 1000)
+	var loadout: Loadout = Loadout.new(Arsenal.pistol())
+	check(offer_text(wall.offer(loadout)) == "WEAPON 1000 \"Buy SMG\" smg" and loadout_text(loadout) == "*pistol 8/80", "Without the SMG the wall offers the SMG for 1000, and the offer changes nothing")
+	loadout.give(Arsenal.smg())
+	loadout.current().magazine = 29
+	check(offer_text(wall.offer(loadout)) == "AMMO 500 \"Buy SMG ammo\" smg", "With 29 of 30 SMG rounds the wall offers SMG ammo for 500")
+	loadout.current().fill()
+	check(offer_text(wall.offer(loadout)) == "NONE 0 \"SMG ammo full\" -", "With full SMG ammunition the wall offers nothing and says so")
+	wall.free()
+
+
+func test_mystery_box() -> void:
+	var box: MysteryBox = MysteryBox.new()
+	box.rng.seed = 7
+	var weapon: Weapon = Weapon.new()
+	weapon.loadout.give(Arsenal.smg())
+	var seen: PackedStringArray = []
+	for roll: int in range(200):
+		box.accept(box.offer(weapon.loadout), weapon)
+		if not seen.has(box.result.id):
+			seen.append(box.result.id)
+		box.advance(4.0)
+		box.advance(10.0)
+	seen.sort()
+	check(seen == PackedStringArray(["lmg", "marksman", "rifle", "shotgun"]), "In 200 rolls from a loadout of the pistol and the SMG the box gives the shotgun, the rifle, the LMG, and the marksman, and never the SMG or the pistol")
+	check(offer_text(box.offer(weapon.loadout)) == "BOX_ROLL 950 \"Mystery box\" -", "An idle box offers a roll for 950")
+	box.accept(box.offer(weapon.loadout), weapon)
+	check(box.phase == MysteryBox.Phase.ROLLING and offer_text(box.offer(weapon.loadout)) == "NONE 0 \"\" -", "A rolling box offers nothing and shows no prompt")
+	box.advance(3.5)
+	var rolling_at: MysteryBox.Phase = box.phase
+	box.advance(0.5)
+	check(rolling_at == MysteryBox.Phase.ROLLING and box.phase == MysteryBox.Phase.OFFERING, "ROLLING lasts 4.0 s")
+	var take: Station.Offer = box.offer(weapon.loadout)
+	check(offer_text(take) == "BOX_TAKE 0 \"Take %s\" %s" % [box.result.display_name, box.result.id], "An offering box offers its result for 0")
+	box.advance(9.5)
+	var offering_at: MysteryBox.Phase = box.phase
+	box.advance(0.5)
+	check(offering_at == MysteryBox.Phase.OFFERING and box.phase == MysteryBox.Phase.IDLE and box.result == null, "OFFERING lasts 10.0 s, and then the weapon is gone")
+	check(loadout_text(weapon.loadout) == "pistol 8/80, *smg 30/150", "A timeout gives nothing")
+	box.accept(box.offer(weapon.loadout), weapon)
+	box.advance(4.0)
+	var offered: StringName = box.result.id
+	box.accept(box.offer(weapon.loadout), weapon)
+	check(box.phase == MysteryBox.Phase.IDLE and box.result == null and weapon.current().def.id == offered and weapon.loadout.find(&"smg") == null and weapon.state == Weapon.State.SWITCHING, "A take gives the offered weapon in place of the SMG in the hands and returns the box to IDLE")
+	weapon.free()
+	box.free()
+
+
 func clear_round(director: RoundDirector) -> void:
 	while director.phase == RoundDirector.Phase.ACTIVE:
 		director.tick(0.25)
@@ -1094,12 +1149,16 @@ func make_arena() -> Arena:
 func test_arena_navigation() -> void:
 	var arena: Arena = await make_arena()
 	check(arena.navigation.navigation_mesh.get_polygon_count() > 0 and arena.zombie_spawns.size() == 8, "The arena bakes a navigation mesh and has 8 zombie spawn points")
+	check(arena.stations.size() == 4 and arena.stations[3] == arena.box, "The arena has three wall buys and the box")
 	var map: RID = arena.get_world_3d().navigation_map
 	var path: PackedVector3Array = NavigationServer3D.map_get_path(map, Vector3(-10.0, 0.0, -3.0), Vector3(-10.0, 1.5, -10.0), true)
 	var via_ramp: bool = false
 	for point: Vector3 in path:
 		via_ramp = via_ramp or point.x > -6.5
 	check(path.size() > 0 and absf(path[path.size() - 1].y - 1.5) < 0.3 and via_ramp, "A path from the foot of the stairs to the platform top goes around by the ramp")
+	var near_box: Vector3 = NavigationServer3D.map_get_closest_point(map, Vector3(10.0, 0.0, 19.5))
+	measure("distance from the box center to the walkable mesh", Vector2(near_box.x - 10.0, near_box.z - 19.5).length(), "m")
+	check(Vector2(near_box.x - 10.0, near_box.z - 19.5).length() >= 0.9, "The bake cuts the box crate out, so the walkable mesh is 0.9 m or more from its center")
 	await finish(arena)
 
 

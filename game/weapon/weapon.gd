@@ -37,12 +37,12 @@ var _trigger_was_held: bool = false
 ## A semi-automatic press made during the cooldown fires when the cooldown ends.
 var _press_pending: bool = false
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
-var _model: Node3D = Node3D.new()
+var _model: Node3D
 var _parts: Node3D
 ## The weapon whose parts the view model shows. During the first half of SWITCHING it is still the old weapon.
 var _shown: StringName = &""
-var _flash: OmniLight3D = OmniLight3D.new()
-var _flash_mesh: MeshInstance3D = MeshInstance3D.new()
+var _flash: OmniLight3D
+var _flash_mesh: MeshInstance3D
 var _flash_left: float = 0.0
 var _recoil: float = 0.0
 
@@ -207,6 +207,7 @@ func _cast_pellets(def: WeaponDef) -> void:
 
 
 func _build_model() -> void:
+	_model = Node3D.new()
 	_model.position = VIEW_OFFSET
 	add_child(_model)
 	var flash_sphere: SphereMesh = SphereMesh.new()
@@ -215,11 +216,13 @@ func _build_model() -> void:
 	var flash_material: StandardMaterial3D = StandardMaterial3D.new()
 	flash_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	flash_material.albedo_color = FLASH_COLOR
+	_flash_mesh = MeshInstance3D.new()
 	_flash_mesh.mesh = flash_sphere
 	_flash_mesh.material_override = flash_material
 	_flash_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_flash_mesh.visible = false
 	_model.add_child(_flash_mesh)
+	_flash = OmniLight3D.new()
 	_flash.light_color = FLASH_COLOR
 	_flash.light_energy = 3.0
 	_flash.omni_range = 6.0

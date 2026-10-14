@@ -14,6 +14,7 @@ const WALL_COLOR: Color = Color(0.42, 0.4, 0.42)
 const COVER_COLOR: Color = Color(0.55, 0.42, 0.3)
 const PLATFORM_COLOR: Color = Color(0.36, 0.42, 0.5)
 const LAMP_COLOR: Color = Color(1.0, 0.72, 0.4)
+const CRATE_COLOR: Color = Color(0.2, 0.26, 0.36)
 const GRID_SHADER: String = """
 shader_type spatial;
 
@@ -47,6 +48,8 @@ var zombie_spawns: Array[Vector3] = [
 	Vector3(17.0, 0.0, 17.0), Vector3(0.0, 0.0, 18.0), Vector3(-17.0, 0.0, 17.0), Vector3(-18.0, 0.0, 0.0),
 ]
 var navigation: NavigationRegion3D = NavigationRegion3D.new()
+var stations: Array[Station] = []
+var box: MysteryBox = MysteryBox.new()
 
 var _shader: Shader = Shader.new()
 
@@ -72,7 +75,25 @@ func build() -> void:
 	_build_platform(Vector3(-10.0, 0.0, -10.0))
 	for corner: Vector3 in [Vector3(-15.0, 0.0, -15.0), Vector3(15.0, 0.0, -15.0), Vector3(15.0, 0.0, 15.0), Vector3(-15.0, 0.0, 15.0)]:
 		_lamp(corner)
+	_build_stations()
 	_bake()
+
+
+## Before the bake, so the bake cuts the box crate out of the walkable mesh.
+func _build_stations() -> void:
+	_place(WallBuy.new(Arsenal.smg(), 1000), Vector3(-8.0, 1.5, -19.95), 0.0)
+	_place(WallBuy.new(Arsenal.shotgun(), 1200), Vector3(19.95, 1.5, -8.0), -PI * 0.5)
+	_place(WallBuy.new(Arsenal.rifle(), 1500), Vector3(-19.95, 1.5, 8.0), PI * 0.5)
+	var crate: StaticBody3D = _box(MysteryBox.CRATE_SIZE, Vector3(10.0, MysteryBox.CRATE_SIZE.y * 0.5, 19.5), CRATE_COLOR, Basis(Vector3.UP, PI))
+	crate.add_child(box)
+	stations.append(box)
+
+
+## facing turns the station about Y. At 0 its front faces +Z.
+func _place(station: Station, at: Vector3, facing: float) -> void:
+	station.transform = Transform3D(Basis(Vector3.UP, facing), at)
+	add_child(station)
+	stations.append(station)
 
 
 ## A 6 m by 6 m platform with stairs on its +Z side for the player and a ramp on its +X side for everyone.
@@ -157,7 +178,7 @@ func _lamp(at: Vector3) -> void:
 	add_child(light)
 
 
-func _box(size: Vector3, center: Vector3, color: Color, basis: Basis = Basis.IDENTITY) -> void:
+func _box(size: Vector3, center: Vector3, color: Color, basis: Basis = Basis.IDENTITY) -> StaticBody3D:
 	var shape: BoxShape3D = BoxShape3D.new()
 	shape.size = size
 	var collision: CollisionShape3D = CollisionShape3D.new()
@@ -177,3 +198,4 @@ func _box(size: Vector3, center: Vector3, color: Color, basis: Basis = Basis.IDE
 	body.add_child(collision)
 	body.add_child(view)
 	navigation.add_child(body)
+	return body
