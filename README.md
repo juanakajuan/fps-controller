@@ -28,6 +28,7 @@ godot --path .
 | Crouch. At sprint speed, slide. | Ctrl, C | B |
 | Fire | Left mouse button | Right trigger |
 | Reload | R | X |
+| Knife attack | V | Right stick press |
 | Pause and resume | Esc | Start |
 | Play again after death | Enter | Start |
 
@@ -39,7 +40,8 @@ The keys use physical key codes. Thus the positions are the same on all keyboard
 - Round 1 has 6 zombies with 150 health. Each round has more zombies. Up to 24 zombies are alive at one time.
 - Zombies walk, jog, or run. In later rounds, more of them run.
 - The pistol does 35 damage. A hit on the head does 70 damage. The magazine holds 8 rounds, and the reserve holds 80 rounds. Each new round fills the magazine and the reserve.
-- You get 10 points for a hit, 60 points for a kill, and 100 points for a kill with a head hit. You start with 500 points. In milestone 1, you cannot spend points.
+- The knife does 150 damage to one zombie at a distance of 2 m or less. A wall stops the knife. One knife attack takes 0.6 seconds. The knife uses no ammunition, and it stops a reload. The reload starts again after the knife attack.
+- You get 10 points for a hit, 60 points for a kill, 100 points for a kill with a head hit, and 130 points for a kill with the knife. You start with 500 points. In milestone 1, you cannot spend points.
 - You have 100 health. A zombie hit removes 40 health. If no zombie hits you for 4 seconds, your health comes back at 50 per second.
 
 `game/rules.gd` holds all these values.
@@ -59,7 +61,7 @@ The keys use physical key codes. Thus the positions are the same on all keyboard
 | `game/player/player_camera_rig.gd` | `PlayerCameraRig` moves the camera on each rendered frame. |
 | `game/player/player_settings.gd` | `PlayerSettings` holds the movement values. |
 | `game/weapon/weapon_def.gd` | `WeaponDef` holds the data of one weapon. |
-| `game/weapon/weapon.gd` | `Weapon` fires, reloads, and casts the hit ray. It also shows the weapon model. |
+| `game/weapon/weapon.gd` | `Weapon` fires, reloads, attacks with the knife, and casts the hit rays. It also shows the weapon model. |
 | `game/zombie/zombie.gd` | `Zombie` finds a path to the player, attacks, and dies. |
 | `game/level/arena.gd` | `Arena` builds the yard and bakes its navigation mesh. |
 | `tests/test_runner.gd` | The headless test suite. |
@@ -101,8 +103,8 @@ If you do not give a path, the file is `user://visual_smoke.png`.
 These checks passed with Godot 4.7.2 on Linux on 2026-10-13:
 
 - `bash tests/run_checks.sh` passed. The editor import and the parse of all 16 scripts gave no errors and no warnings.
-- The test suite passed on Jolt Physics with 140 checks and 0 failures.
-- The test suite passed on Godot Physics with 140 checks and 0 failures.
+- The test suite passed on Jolt Physics with 153 checks and 0 failures.
+- The test suite passed on Godot Physics with 153 checks and 0 failures.
 - `godot --headless --path . --quit-after 600` gave no `ERROR` lines and no `WARNING` lines.
 - The visual smoke test passed with Vulkan Forward+ at 1600x900. The luminance spread of the frame was 0.93. A frame of one color gives 0.0.
 
@@ -112,4 +114,5 @@ The test suite measured these game values:
 |---|---|---|
 | Health 4.3 s after 30 damage | 84.2 | 84.2 |
 | Pistol reload time | 1.4 s | 1.4 s |
+| Knife attack time | 0.6 s | 0.6 s |
 | Time for a zombie at 3.2 m/s to reach the player around a 2 m block | 1.85 s | 1.85 s |

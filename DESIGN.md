@@ -86,6 +86,8 @@ Then move and rename. The player is a part of the game now, not an addon:
 ```gdscript
 class_name Rules
 
+enum HitKind { BODY, HEAD, MELEE }
+
 const INTERMISSION_SECONDS: float = 10.0
 const FIRST_ROUND_DELAY: float = 3.0
 const MAX_ALIVE: int = 24
@@ -93,6 +95,7 @@ const MAX_ALIVE: int = 24
 const POINTS_HIT: int = 10
 const POINTS_KILL: int = 60
 const POINTS_HEADSHOT_KILL: int = 100
+const POINTS_MELEE_KILL: int = 130
 
 const PLAYER_MAX_HEALTH: float = 100.0
 const PLAYER_REGEN_DELAY: float = 4.0     # seconds with no damage before regeneration starts
@@ -104,10 +107,15 @@ const ZOMBIE_ATTACK_COOLDOWN: float = 1.2
 const ZOMBIE_HEAD_HEIGHT: float = 1.5     # a hit above this height on the body is a headshot
 const HEADSHOT_MULTIPLIER: float = 2.0
 
+const MELEE_DAMAGE: float = 150.0         # one melee kills a round 1 zombie
+const MELEE_SECONDS: float = 0.6          # total time in Weapon.State.MELEE
+const MELEE_RANGE: float = 2.0
+
 static func zombie_count(round_number: int) -> int        # total zombies in the round
 static func zombie_health(round_number: int) -> float
 static func zombie_speed(round_number: int, roll: float) -> float   # roll in [0, 1) picks walker, jogger, or runner
 static func spawn_interval(round_number: int) -> float
+static func points_for_hit(killed: bool, kind: HitKind) -> int   # 10 for any hit that does not kill. Kills: BODY 60, HEAD 100, MELEE 130.
 ```
 
 Wave formulas (round `r`, starting at 1):
@@ -182,10 +190,10 @@ static func starting_pistol() -> WeaponDef   # 8 rounds, 80 reserve, 35 damage, 
 ```gdscript
 class_name Weapon extends Node3D
 
-enum State { READY, COOLDOWN, RELOADING }
+enum State { READY, COOLDOWN, RELOADING, MELEE }
 
 signal fired
-signal hit(target: Zombie, damage: float, headshot: bool)
+signal hit(target: Zombie, damage: float, kind: Rules.HitKind)
 signal ammo_changed(magazine: int, reserve: int)
 signal reload_started
 signal reload_finished
@@ -195,12 +203,24 @@ var state: State = State.READY
 var magazine: int
 var reserve: int
 var trigger_held: bool = false      # the game writes this from input. Tests write it directly.
-var reload_requested: bool = false  # one tick
+var reload_requested: bool = false  # kept until READY
+var melee_requested: bool = false   # one tick
 
 func refill() -> void   # magazine and reserve to full. Game calls it on each round_started.
 ```
 
 The weapon fires on the physics tick. A semi-automatic weapon fires once per press of the trigger. An empty magazine starts a reload when there is reserve. The ray starts at the camera and excludes the player. A ray that hits a `Zombie` emits `hit`. The headshot test is `hit_position.y - zombie.global_position.y >= Rules.ZOMBIE_HEAD_HEIGHT`.
+
+The melee is a state of the weapon, so the one state machine decides what the player can do with the weapon at a time:
+
+| From | Condition | To | Effect |
+|---|---|---|---|
+| READY, COOLDOWN | `melee_requested` | MELEE | cast the melee ray, timer = `MELEE_SECONDS` |
+| RELOADING | `melee_requested` | MELEE | as above, and `reload_requested = true`. Magazine and reserve do not change. |
+| MELEE | `melee_requested` | MELEE | nothing. The request is cleared. |
+| MELEE | timer done | READY | on the same tick, READY starts the pending reload or fires a pending press |
+
+The melee ray starts at the camera, has the length `MELEE_RANGE`, and uses the mask `WORLD | ZOMBIES`. A wall stops it, and it hits at most one zombie. A hit emits `hit(target, MELEE_DAMAGE, HitKind.MELEE)`. A melee never fires and uses no ammunition. The view model thrusts forward by a sine over the MELEE time.
 
 Ammo in milestone 1: `refill()` on each new round. Milestone 2 replaces this with ammo buys.
 
@@ -253,7 +273,7 @@ The arena is a 40 m by 40 m yard with outer walls, cover blocks, one raised plat
 
 ## Input
 
-Movement actions as today. Add `fire` (left mouse), `reload` (R), `pause` (Escape), `restart` (Enter). Register missing actions in code, as the player does today.
+Movement actions as today. Add `fire` (left mouse), `reload` (R), `melee` (V, gamepad right stick press), `pause` (Escape), `restart` (Enter). Register missing actions in code, as the player does today.
 
 ## Boundaries
 
@@ -269,6 +289,8 @@ Headless tests with literal expected values:
 - `RoundDirector`: STARTING to ACTIVE after `FIRST_ROUND_DELAY`. Spawn counts over time never pass `MAX_ALIVE`. Round clear after all deaths. Intermission length. GAME_OVER stops spawns. `rounds_survived` values.
 - `Points`: earn, spend success, spend failure leaves the balance.
 - `Weapon` in a real physics world: one shot per press when semi-automatic, the magazine count, auto reload at empty, reload time, no fire during reload, a ray hit on a zombie emits `hit`, a headshot test above head height, a wall blocks the ray.
+- Melee in a real physics world: a melee hits a zombie 1.5 m ahead once for 150. MELEE lasts 36 ticks (0.6 s). A second request during MELEE does not hit and does not make MELEE longer. A held trigger does not fire during MELEE and fires once when MELEE ends. A wall blocks the melee of a zombie 1.6 m away. A zombie 3 m away is not hit. A melee during a reload leaves 7 and 80, the reload starts again when MELEE ends, and it loads 1 round after the full 84 ticks.
+- Melee through `Game`: one melee kills a round 1 zombie and earns 130 points. A melee on a round 2 zombie (250 health) leaves 100 health and earns 10 points.
 - `Zombie` in the real arena: reaches the player around a cover block, attacks at range with cooldown, dies at zero health, frees itself.
 - `Player`: damage, regeneration after the delay, death stops control and emits `died`.
 - `Game` integration: a full round 1 with forced kills through `Weapon.hit` leads to INTERMISSION and then round 2. Points after a kill and after a headshot kill. Player death leads to GAME_OVER. Restart reloads the scene.
@@ -278,7 +300,7 @@ Headless tests with literal expected values:
 
 ## Accepted deviations
 
-- `Rules.points_for_hit(killed, headshot)` is added. The points for a hit are a rule, so the rule lives in `Rules` and the test asserts it without a scene.
+- `Rules.points_for_hit(killed, kind)` is added. The points for a hit are a rule, so the rule lives in `Rules` and the test asserts it without a scene.
 - `Rules.WALKER_SPEED`, `JOGGER_SPEED`, and `RUNNER_SPEED` name the three speeds of `zombie_speed`.
 - `RoundDirector` has a `TRANSITIONS` table and a private `_rounds_cleared`. `_enter()` asserts each phase change against the table. `rounds_survived()` returns `_rounds_cleared`, because in GAME_OVER the phase no longer tells if the last round was cleared. The values are the same as in the design: 0 before round 1, `round_number - 1` while ACTIVE, `round_number` in INTERMISSION.
 - A new round spawns its first zombie on the tick that starts it. Later spawns come one `spawn_interval` apart. A spawn that `MAX_ALIVE` holds back goes out on the first tick after a death, and the next one waits a full interval, so a long hold does not release a burst.
@@ -294,3 +316,8 @@ Headless tests with literal expected values:
 - The gamepad also gets actions: right trigger fires, X reloads, and Start pauses and, after death, restarts.
 - `run/main_scene` is set in the commit that adds `game/main.tscn`, not in the move commit. The editor import fails while the main scene file is missing.
 - The game test loads `game/main.tscn`, not `Game.new()`, because `reload_current_scene()` needs a scene file.
+- The melee uses the existing `Weapon.hit` signal, not a parallel `melee_hit`. A melee kill earns more than a body kill, so `Game` must know the kind of hit in either case. `Rules.HitKind` (`BODY`, `HEAD`, `MELEE`) replaces the `headshot: bool` of `hit` and of `points_for_hit`. A melee that is also a headshot cannot be expressed, and `Game._on_weapon_hit` stays one handler with no branch for the melee.
+- The melee hit test is a ray, not a shape cast. A ray hits at most one zombie and stops at a wall with no extra code. The zombie capsule is 0.7 m wide, so a ray at the crosshair is enough at 2 m.
+- The melee ray is cast on the first tick of MELEE. The rest of `MELEE_SECONDS` is the recovery time.
+- A fire press during MELEE is kept and fires on the tick that MELEE ends, the same as a press during the cooldown.
+- A melee that interrupts a reload sets `reload_requested`. The reload starts again from the beginning when MELEE ends, and it takes the full `reload_seconds`.
