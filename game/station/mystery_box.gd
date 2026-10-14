@@ -9,7 +9,9 @@ const CRATE_SIZE: Vector3 = Vector3(1.8, 0.9, 0.9)
 ## It also reaches up over the floating weapon, so the player can look at the weapon to take it.
 const AREA_SIZE: Vector3 = Vector3(2.0, 1.8, 1.1)
 const CYCLE_SECONDS: float = 0.1
-const MODEL_SCALE: float = 2.0
+const MODEL_SCALE: float = 1.5
+## The floating weapon is one flat glowing color, so it reads in the dark yard.
+const MODEL_TINT: Color = Color(0.75, 0.85, 1.0)
 const MODEL_HEIGHT: float = 0.45
 const SPIN_SPEED: float = 1.2
 const GLOW_COLOR: Color = Color(0.45, 0.65, 1.0)
@@ -40,7 +42,7 @@ func _ready() -> void:
 	_display.position = Vector3(0.0, CRATE_SIZE.y * 0.5 + MODEL_HEIGHT, 0.0)
 	add_child(_display)
 	for weapon: WeaponDef in _pool:
-		var model: Node3D = weapon.build_model(MODEL_SCALE)
+		var model: Node3D = weapon.build_model(MODEL_SCALE, MODEL_TINT)
 		model.basis = Basis(Vector3.UP, PI * 0.5)
 		model.visible = false
 		_display.add_child(model)
