@@ -9,7 +9,7 @@ signal ammo_changed(magazine: int, reserve: int)
 signal reload_started
 signal reload_finished
 
-const VIEW_OFFSET: Vector3 = Vector3(0.22, -0.2, -0.42)
+const VIEW_OFFSET: Vector3 = Vector3(0.16, -0.15, -0.36)
 const RECOIL_KICK: float = 0.05
 const RECOIL_RECOVERY: float = 18.0
 const FLASH_SECONDS: float = 0.05
@@ -137,9 +137,9 @@ func _cast_ray() -> void:
 func _build_model() -> void:
 	_model.position = VIEW_OFFSET
 	add_child(_model)
-	_add_part(Vector3(0.05, 0.06, 0.24), Vector3(0.0, 0.0, -0.04), METAL_COLOR)
-	_add_part(Vector3(0.045, 0.12, 0.06), Vector3(0.0, -0.08, 0.04), GRIP_COLOR)
-	_add_part(Vector3(0.012, 0.02, 0.012), Vector3(0.0, 0.04, -0.14), METAL_COLOR)
+	_add_part(Vector3(0.035, 0.045, 0.17), Vector3(0.0, 0.0, -0.03), METAL_COLOR)
+	_add_part(Vector3(0.032, 0.09, 0.045), Vector3(0.0, -0.06, 0.03), GRIP_COLOR)
+	_add_part(Vector3(0.008, 0.014, 0.008), Vector3(0.0, 0.029, -0.1), METAL_COLOR)
 	var flash_sphere: SphereMesh = SphereMesh.new()
 	flash_sphere.radius = 0.04
 	flash_sphere.height = 0.08
@@ -149,13 +149,13 @@ func _build_model() -> void:
 	_flash_mesh.mesh = flash_sphere
 	_flash_mesh.material_override = flash_material
 	_flash_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_flash_mesh.position = Vector3(0.0, 0.0, -0.2)
+	_flash_mesh.position = Vector3(0.0, 0.0, -0.14)
 	_flash_mesh.visible = false
 	_model.add_child(_flash_mesh)
 	_flash.light_color = FLASH_COLOR
 	_flash.light_energy = 3.0
 	_flash.omni_range = 6.0
-	_flash.position = Vector3(0.0, 0.0, -0.25)
+	_flash.position = Vector3(0.0, 0.0, -0.2)
 	_flash.visible = false
 	_model.add_child(_flash)
 
