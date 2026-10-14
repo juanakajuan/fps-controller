@@ -18,6 +18,8 @@ class Intent:
 signal jumped
 signal landed(impact_speed: float)
 signal move_state_changed(previous: MoveState, current: MoveState)
+signal health_changed(health: float)
+signal died
 
 const MAX_PITCH: float = PI * 89.0 / 180.0
 const STEP_CLEARANCE: float = 0.05
@@ -38,6 +40,8 @@ var pitch: float = 0.0
 var move_state: MoveState = MoveState.AIR
 var stance: Stance = Stance.STAND
 var camera: Camera3D
+var health: float = Rules.PLAYER_MAX_HEALTH
+var alive: bool = true
 
 var _rig: PlayerCameraRig
 var _shape: CapsuleShape3D
@@ -49,6 +53,12 @@ var _crouch_was_held: bool = false
 var _jump_cut_armed: bool = false
 var _impact_speed: float = 0.0
 var _on_floor: bool = false
+var _regen_delay_left: float = 0.0
+
+
+func _init() -> void:
+	collision_layer = Layers.PLAYER
+	collision_mask = Layers.WORLD | Layers.ZOMBIES
 
 
 func _ready() -> void:
@@ -97,6 +107,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if player_controlled:
 		_read_intent()
+	_regenerate(delta)
 	_coyote_left = maxf(_coyote_left - delta, 0.0)
 	_jump_buffer_left = maxf(_jump_buffer_left - delta, 0.0)
 	_slide_cooldown_left = maxf(_slide_cooldown_left - delta, 0.0)
@@ -134,8 +145,33 @@ func teleport(target_position: Vector3, target_yaw: float) -> void:
 		_settle()
 
 
+## No effect when not alive. At zero health the body stops reading input and keeps no intent.
+func take_damage(amount: float) -> void:
+	if not alive:
+		return
+	health = maxf(health - amount, 0.0)
+	_regen_delay_left = Rules.PLAYER_REGEN_DELAY
+	health_changed.emit(health)
+	if health > 0.0:
+		return
+	alive = false
+	player_controlled = false
+	intent = Intent.new()
+	died.emit()
+
+
 func horizontal_speed() -> float:
 	return Vector2(velocity.x, velocity.z).length()
+
+
+func _regenerate(delta: float) -> void:
+	if not alive or health >= Rules.PLAYER_MAX_HEALTH:
+		return
+	if _regen_delay_left > 0.0:
+		_regen_delay_left -= delta
+		return
+	health = minf(health + Rules.PLAYER_REGEN_RATE * delta, Rules.PLAYER_MAX_HEALTH)
+	health_changed.emit(health)
 
 
 func _settle() -> void:

@@ -53,6 +53,10 @@ func run() -> void:
 	await test_camera_rig()
 	await test_camera_on_stairs()
 	await test_player_input()
+	await test_player_health()
+	await test_weapon()
+	await test_arena_navigation()
+	await test_zombie()
 	print("RESULT: %d checks, %d failures" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -726,3 +730,173 @@ func test_points() -> void:
 	check(points.spend(400) and points.balance == 170 and points.earned == 70, "Spending 400 of 570 succeeds and leaves 170, and earned stays 70")
 	check(not points.spend(171) and points.balance == 170, "Spending 171 of 170 fails and leaves the balance at 170")
 	check(balances == [560, 570, 170], "changed reports 560, 570, 170 and nothing for the failed spend")
+
+
+func test_player_health() -> void:
+	var level: Node3D = make_level()
+	var player: Player = spawn(level, tuning(), Vector3.ZERO, 0.0)
+	player.take_damage(30.0)
+	check(player.health == 70.0, "30 damage leaves 70 health")
+	await frames(234)
+	check(player.health == 70.0, "3.9 s after the damage there is no regeneration")
+	await frames(24)
+	measure("health 4.3 s after 30 damage", player.health, "hp")
+	check(player.health > 83.0 and player.health < 86.0, "0.3 s into regeneration at 50 per second the health is near 85")
+	await frames(42)
+	check(player.health == 100.0, "5.0 s after the damage the health is back at 100 and stops there")
+	var dying: Player = spawn(level, tuning(), Vector3(5.0, 0.0, 0.0), 0.0)
+	dying.player_controlled = true
+	dying.intent.move = Vector2(0.0, 1.0)
+	var healths: Array[float] = []
+	var deaths: Array[int] = [0]
+	dying.health_changed.connect(func(value: float) -> void: healths.append(value))
+	dying.died.connect(func() -> void: deaths[0] += 1)
+	dying.take_damage(40.0)
+	dying.take_damage(40.0)
+	dying.take_damage(40.0)
+	dying.take_damage(40.0)
+	check(healths == [60.0, 20.0, 0.0] and deaths[0] == 1, "Three 40 damage hits report 60, 20, 0 and one death, and a fourth hit changes nothing")
+	check(not dying.alive and not dying.player_controlled and dying.intent.move == Vector2.ZERO, "A dead player is not alive, not player controlled, and has no move intent")
+	await frames(30)
+	check(dying.health == 0.0 and dying.horizontal_speed() < 0.01, "A dead player does not regenerate or move")
+	await finish(level)
+
+
+func make_zombie(level: Node3D, at: Vector3, start_health: float, move_speed: float, target: Node3D) -> Zombie:
+	var zombie: Zombie = Zombie.new()
+	zombie.setup(start_health, move_speed, target)
+	zombie.position = at
+	level.add_child(zombie)
+	return zombie
+
+
+## A zombie whose target is a marker at its own feet stands still in ATTACK.
+func make_still_zombie(level: Node3D, at: Vector3) -> Zombie:
+	var marker: Marker3D = Marker3D.new()
+	marker.position = at
+	level.add_child(marker)
+	return make_zombie(level, at, 150.0, 1.6, marker)
+
+
+func test_weapon() -> void:
+	var level: Node3D = make_level()
+	add_box(level, Vector3(0.5, 3.0, 4.0), Vector3(3.0, 1.5, 0.0))
+	var player: Player = spawn(level, tuning(), Vector3.ZERO, 0.0)
+	var weapon: Weapon = Weapon.new()
+	weapon.def = WeaponDef.starting_pistol()
+	weapon.def.spread_degrees = 0.0
+	player.camera.add_child(weapon)
+	var ahead: Zombie = make_still_zombie(level, Vector3(0.0, 0.0, -6.0))
+	var behind_wall: Zombie = make_still_zombie(level, Vector3(6.0, 0.0, 0.0))
+	var shots: Array[int] = [0]
+	var hits: Array[String] = []
+	var reloads: Array[String] = []
+	weapon.fired.connect(func() -> void: shots[0] += 1)
+	weapon.hit.connect(func(target: Zombie, damage: float, headshot: bool) -> void:
+		hits.append("%s %.1f %s" % ["ahead" if target == ahead else "other", damage, "head" if headshot else "body"]))
+	weapon.reload_started.connect(func() -> void: reloads.append("started %d" % Engine.get_physics_frames()))
+	weapon.reload_finished.connect(func() -> void: reloads.append("finished %d" % Engine.get_physics_frames()))
+	await frames(5)
+	check(weapon.magazine == 8 and weapon.reserve == 80 and weapon.state == Weapon.State.READY, "The starting pistol is READY with 8 in the magazine and 80 in reserve")
+	weapon.trigger_held = true
+	await frames(30)
+	check(shots[0] == 1 and weapon.magazine == 7, "Holding the trigger of a semi-automatic weapon for 0.5 s fires once")
+	check(hits == ["ahead 70.0 head"], "A level shot from 1.65 m eye height hits the zombie 6 m ahead in the head for 70 damage")
+	weapon.trigger_held = false
+	player.look(0.0, -atan(0.65 / 5.65))
+	await frames(2)
+	weapon.trigger_held = true
+	await frames(1)
+	weapon.trigger_held = false
+	check(shots[0] == 2 and hits == ["ahead 70.0 head", "ahead 35.0 body"], "A press aimed at 1.0 m height hits the body for 35 damage")
+	player.look(-PI * 0.5, atan(0.65 / 5.65))
+	await frames(12)
+	weapon.trigger_held = true
+	await frames(1)
+	weapon.trigger_held = false
+	check(shots[0] == 3 and hits.size() == 2 and behind_wall.health == 150.0, "A shot at the zombie behind a wall fires but does not hit")
+	for press: int in range(5):
+		await frames(12)
+		weapon.trigger_held = true
+		await frames(1)
+		weapon.trigger_held = false
+	check(shots[0] == 8 and weapon.magazine == 0, "Eight presses empty the 8-round magazine")
+	await frames(12)
+	check(weapon.state == Weapon.State.RELOADING and reloads.size() == 1, "The empty magazine starts a reload by itself")
+	weapon.trigger_held = true
+	await frames(60)
+	weapon.trigger_held = false
+	check(shots[0] == 8 and weapon.state == Weapon.State.RELOADING, "Presses during the reload do not fire")
+	await frames(30)
+	check(weapon.state == Weapon.State.READY and weapon.magazine == 8 and weapon.reserve == 72, "After the reload the magazine has 8 and the reserve has 72")
+	var reload_ticks: int = int(reloads[1].split(" ")[1]) - int(reloads[0].split(" ")[1])
+	measure("reload time", reload_ticks * TICK, "s")
+	check(reload_ticks == 84, "The reload takes 84 ticks, which is 1.4 s")
+	weapon.trigger_held = true
+	await frames(1)
+	weapon.trigger_held = false
+	weapon.reload_requested = true
+	await frames(12)
+	check(weapon.state == Weapon.State.RELOADING and weapon.magazine == 7, "A reload request with 7 of 8 rounds starts a reload")
+	weapon.refill()
+	check(weapon.state == Weapon.State.READY and weapon.magazine == 8 and weapon.reserve == 80, "refill() ends the reload and fills the magazine and the reserve")
+	await finish(level)
+
+
+## The navigation map takes a few physics ticks to take in the baked region.
+func make_arena() -> Arena:
+	var arena: Arena = Arena.new()
+	root.add_child(arena)
+	arena.build()
+	var map: RID = arena.get_world_3d().navigation_map
+	for tick: int in range(30):
+		if not NavigationServer3D.map_get_path(map, arena.player_spawn.origin, arena.zombie_spawns[0], true).is_empty():
+			break
+		await physics_frame
+	return arena
+
+
+func test_arena_navigation() -> void:
+	var arena: Arena = await make_arena()
+	check(arena.navigation.navigation_mesh.get_polygon_count() > 0 and arena.zombie_spawns.size() == 8, "The arena bakes a navigation mesh and has 8 zombie spawn points")
+	var map: RID = arena.get_world_3d().navigation_map
+	var path: PackedVector3Array = NavigationServer3D.map_get_path(map, Vector3(-10.0, 0.0, -3.0), Vector3(-10.0, 1.5, -10.0), true)
+	var via_ramp: bool = false
+	for point: Vector3 in path:
+		via_ramp = via_ramp or point.x > -6.5
+	check(path.size() > 0 and absf(path[path.size() - 1].y - 1.5) < 0.3 and via_ramp, "A path from the foot of the stairs to the platform top goes around by the ramp")
+	await finish(arena)
+
+
+func test_zombie() -> void:
+	var arena: Arena = await make_arena()
+	var player: Player = spawn(arena, tuning(), Vector3(8.0, 0.0, 7.0), 0.0)
+	var zombie: Zombie = make_zombie(arena, Vector3(8.0, 0.0, 1.0), 150.0, 3.2, player)
+	var attacks: Array[float] = []
+	var deaths: Array[bool] = []
+	zombie.attacked.connect(func(damage: float) -> void: attacks.append(damage))
+	zombie.died.connect(func(headshot: bool) -> void: deaths.append(headshot))
+	var reached: int = -1
+	for tick: int in range(1, 601):
+		await physics_frame
+		if zombie.state == Zombie.State.ATTACK:
+			reached = tick
+			break
+	measure("time for a 3.2 m/s zombie to reach the player around a 2 m block", reached * TICK, "s")
+	var offset: Vector3 = player.global_position - zombie.global_position
+	check(reached > 0 and reached * TICK < 6.0 and Vector2(offset.x, offset.z).length() <= 1.3, "A zombie behind a 2 m block reaches attack range of the player within 6 s")
+	await frames(150)
+	check(attacks == [40.0, 40.0, 40.0], "In 2.5 s of ATTACK the zombie attacks three times for 40, 1.2 s apart")
+	player.teleport(Vector3(-5.0, 0.0, 15.0), 0.0)
+	await frames(2)
+	check(zombie.state == Zombie.State.CHASE, "The zombie goes back to CHASE when the player leaves range")
+	zombie.take_damage(100.0, false)
+	check(zombie.state == Zombie.State.CHASE and zombie.health == 50.0 and deaths.is_empty(), "100 damage leaves 50 health and the zombie keeps chasing")
+	zombie.take_damage(70.0, true)
+	zombie.take_damage(70.0, true)
+	check(zombie.state == Zombie.State.DEAD and zombie.health == 0.0 and deaths == [true], "A 70 headshot at 50 health kills the zombie once and reports a headshot")
+	await frames(30)
+	check(is_instance_valid(zombie), "The dead zombie still sinks 0.5 s after death")
+	await frames(40)
+	check(not is_instance_valid(zombie), "The dead zombie frees itself 1.0 s after death")
+	await finish(arena)
