@@ -66,6 +66,7 @@ func run() -> void:
 	await test_zombie()
 	await test_game()
 	await test_game_melee()
+	await test_game_stations()
 	print("RESULT: %d checks, %d failures" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -1234,7 +1235,7 @@ func test_game() -> void:
 			started = tick
 			break
 	check(started >= 179 and started <= 181 and game.director.round_number == 1 and live_zombies(game).size() == 1, "Round 1 starts 3 s after the game starts and spawns one zombie")
-	check(game.hud.round_label.text == "1" and game.hud.points_label.text == "500" and game.hud.ammo_label.text == "8 / 80", "The HUD shows round 1, 500 points, and 8 / 80 ammo")
+	check(game.hud.round_label.text == "1" and game.hud.points_label.text == "500" and game.hud.weapon_label.text == "Pistol" and game.hud.ammo_label.text == "8 / 80", "The HUD shows round 1, 500 points, the pistol, and 8 / 80 ammo")
 	var first: Zombie = live_zombies(game)[0]
 	check(first.health == 150.0 and first.speed == 1.6, "A round 1 zombie has 150 health and walks at 1.6 m/s")
 	game.weapon.hit.emit(first, 35.0, Rules.HitKind.BODY)
@@ -1310,6 +1311,78 @@ func test_game_melee() -> void:
 	await frames(1)
 	check(first.state == Zombie.State.DEAD and game.points.balance == 630 and game.hud.points_label.text == "630", "One melee kills a round 1 zombie and earns 130 points")
 	check(game.weapon.current().magazine == 8 and game.weapon.current().reserve == 80, "The melee uses no ammunition")
+	current_scene = null
+	game.queue_free()
+	await physics_frame
+
+
+func prompt_text(game: Game) -> String:
+	return game.hud.prompt_label.text if game.hud.prompt_label.visible else ""
+
+
+func send_wheel(button: MouseButton) -> void:
+	for pressed: bool in [true, false]:
+		var event: InputEventMouseButton = InputEventMouseButton.new()
+		event.button_index = button
+		event.pressed = pressed
+		Input.parse_input_event(event)
+
+
+## The first zombie comes 3 s after the start, so the buys happen with no zombie alive.
+func test_game_stations() -> void:
+	var game: Game = start_game()
+	game.player.teleport(Vector3(-8.0, 0.0, -18.45), 0.0)
+	await frames(3)
+	check(prompt_text(game) == "E  Buy SMG  1000" and game.hud.prompt_label.modulate == Hud.PROMPT_GRAY, "1.5 m from the SMG wall buy the prompt is \"E  Buy SMG  1000\" in gray, because 500 points are not enough")
+	check(not game.interact() and game.points.balance == 500 and loadout_text(game.weapon.loadout) == "*pistol 8/80", "With 500 points a press buys nothing and the balance stays 500")
+	game.points.earn(500)
+	await frames(1)
+	check(game.hud.prompt_label.modulate == Color.WHITE, "With 1000 points the prompt is white")
+	check(game.interact() and game.points.balance == 0 and loadout_text(game.weapon.loadout) == "pistol 8/80, *smg 30/150", "With 1000 points a press buys the SMG into slot 2 and leaves 0 points")
+	check(game.hud.weapon_label.text == "SMG" and game.hud.ammo_label.text == "30 / 150", "The HUD shows the SMG and its 30 / 150 ammunition at once")
+	await frames(1)
+	check(prompt_text(game) == "SMG ammo full" and not game.interact() and game.points.balance == 0, "With a full SMG the prompt says \"SMG ammo full\" and a press does nothing")
+	await wait_for_weapon_state(game.weapon, Weapon.State.READY, 60)
+	game.weapon.trigger_held = true
+	await frames(10)
+	game.weapon.trigger_held = false
+	await frames(1)
+	var after_burst: int = game.weapon.current().magazine
+	game.points.earn(500)
+	await frames(1)
+	check(after_burst < 30 and prompt_text(game) == "E  Buy SMG ammo  500", "After a burst the SMG wall offers ammo for 500")
+	check(game.interact() and game.points.balance == 0 and slot_text(game.weapon.current()) == "smg 30/150", "The ammo buy fills the SMG to 30 and 150 for 500 points")
+	var wall: StaticBody3D = StaticBody3D.new()
+	wall.collision_layer = Layers.WORLD
+	var wall_shape: CollisionShape3D = CollisionShape3D.new()
+	var wall_box: BoxShape3D = BoxShape3D.new()
+	wall_box.size = Vector3(3.0, 3.0, 0.1)
+	wall_shape.shape = wall_box
+	wall.add_child(wall_shape)
+	wall.position = Vector3(-8.0, 1.5, -19.0)
+	game.arena.add_child(wall)
+	await frames(2)
+	check(prompt_text(game) == "" and not game.interact(), "A wall between the player and the station hides the prompt, and a press does nothing")
+	wall.queue_free()
+	game.player.player_controlled = true
+	send_wheel(MOUSE_BUTTON_WHEEL_UP)
+	await frames(2)
+	check(game.weapon.state == Weapon.State.SWITCHING and game.weapon.current().def.id == &"pistol" and game.hud.weapon_label.text == "Pistol", "A turn of the mouse wheel changes to the pistol")
+	game.player.player_controlled = false
+	game.player.teleport(Vector3(10.0, 0.0, 18.2), PI)
+	game.points.earn(950)
+	await frames(2)
+	check(prompt_text(game) == "E  Mystery box  950", "In front of the box the prompt is \"E  Mystery box  950\"")
+	check(game.interact() and game.points.balance == 0 and game.arena.box.phase == MysteryBox.Phase.ROLLING, "A roll through Game removes 950 points")
+	await frames(1)
+	check(prompt_text(game) == "", "A rolling box shows no prompt")
+	game.arena.box.advance(4.0)
+	await frames(1)
+	check(prompt_text(game) == "E  Take %s" % game.arena.box.result.display_name and game.hud.prompt_label.modulate == Color.WHITE, "An offering box shows \"E  Take\" and the weapon name")
+	game.arena.box.advance(10.0)
+	await frames(1)
+	check(game.arena.box.phase == MysteryBox.Phase.IDLE and game.points.balance == 0 and loadout_text(game.weapon.loadout) == "*pistol 8/80, smg 30/150", "A timeout gives no weapon and does not give the 950 points back")
+	check(game.director.phase == RoundDirector.Phase.STARTING, "All buys happened before round 1")
 	current_scene = null
 	game.queue_free()
 	await physics_frame

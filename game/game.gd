@@ -13,6 +13,8 @@ var director: RoundDirector = RoundDirector.new()
 var points: Points = Points.new()
 
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
+## The station in view on the last physics tick, or null.
+var _station: Station = null
 
 
 func _ready() -> void:
@@ -33,6 +35,7 @@ func _ready() -> void:
 	add_child(hud)
 	weapon.hit.connect(_on_weapon_hit)
 	weapon.ammo_changed.connect(hud.set_ammo)
+	weapon.equipped.connect(func(def: WeaponDef) -> void: hud.set_weapon(def.display_name))
 	player.health_changed.connect(hud.set_health)
 	player.died.connect(director.player_died)
 	points.changed.connect(hud.set_points)
@@ -41,6 +44,7 @@ func _ready() -> void:
 	director.game_over.connect(_on_game_over)
 	hud.set_points(points.balance)
 	hud.set_ammo(weapon.current().magazine, weapon.current().reserve)
+	hud.set_weapon(weapon.current().def.display_name)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
@@ -53,8 +57,13 @@ func _physics_process(delta: float) -> void:
 			weapon.reload_requested = true
 		if Input.is_action_just_pressed(&"melee"):
 			weapon.melee_requested = true
+		if Input.is_action_just_pressed(&"switch_weapon"):
+			weapon.switch_requested = true
 	elif not player.alive:
 		weapon.trigger_held = false
+	_look_for_station()
+	if player.player_controlled and Input.is_action_just_pressed(&"interact"):
+		interact()
 	for spawn: int in range(director.tick(delta)):
 		_spawn_zombie()
 
@@ -80,6 +89,41 @@ func set_paused(paused: bool) -> void:
 func restart() -> void:
 	get_tree().paused = false
 	get_tree().reload_current_scene()
+
+
+## The prompt on the screen can be one tick old, so the press reads the offer again. Returns true if the press bought something.
+func interact() -> bool:
+	if not is_instance_valid(_station):
+		return false
+	var offer: Station.Offer = _station.offer(weapon.loadout)
+	if offer.kind == Station.Offer.Kind.NONE or not points.spend(offer.cost):
+		return false
+	_station.accept(offer, weapon)
+	return true
+
+
+## A ray from the camera finds the station in use. A wall stops it, so a station behind a wall is not in use.
+func _look_for_station() -> void:
+	_station = null
+	if player.alive:
+		var view: Transform3D = player.camera.global_transform
+		var query: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(view.origin, view.origin - view.basis.z * Rules.INTERACT_RANGE, Layers.WORLD | Layers.INTERACT)
+		query.collide_with_areas = true
+		var collider: Object = get_world_3d().direct_space_state.intersect_ray(query).get("collider")
+		_station = collider as Station
+	if _station == null:
+		hud.set_prompt("", true)
+		return
+	var offer: Station.Offer = _station.offer(weapon.loadout)
+	hud.set_prompt(_prompt_text(offer), offer.kind != Station.Offer.Kind.NONE and points.balance >= offer.cost)
+
+
+static func _prompt_text(offer: Station.Offer) -> String:
+	if offer.kind == Station.Offer.Kind.NONE:
+		return offer.label
+	if offer.cost == 0:
+		return "E  %s" % offer.label
+	return "E  %s  %d" % [offer.label, offer.cost]
 
 
 func _spawn_zombie() -> void:
@@ -121,6 +165,8 @@ func _register_actions() -> void:
 	_add_action(&"fire", [_mouse(MOUSE_BUTTON_LEFT), _joy_axis(JOY_AXIS_TRIGGER_RIGHT)])
 	_add_action(&"reload", [_key(KEY_R), _joy_button(JOY_BUTTON_X)])
 	_add_action(&"melee", [_key(KEY_V), _joy_button(JOY_BUTTON_RIGHT_STICK)])
+	_add_action(&"interact", [_key(KEY_E), _joy_button(JOY_BUTTON_RIGHT_SHOULDER)])
+	_add_action(&"switch_weapon", [_key(KEY_Q), _mouse(MOUSE_BUTTON_WHEEL_UP), _mouse(MOUSE_BUTTON_WHEEL_DOWN), _joy_button(JOY_BUTTON_Y)])
 	_add_action(&"pause", [_key(KEY_ESCAPE), _joy_button(JOY_BUTTON_START)])
 	_add_action(&"restart", [_key(KEY_ENTER), _key(KEY_KP_ENTER), _joy_button(JOY_BUTTON_START)])
 

@@ -7,10 +7,13 @@ const ROUND_COLOR: Color = Color(0.75, 0.08, 0.06)
 const TEXT_COLOR: Color = Color(0.95, 0.93, 0.88)
 const KILL_COLOR: Color = Color(1.0, 0.2, 0.15)
 const VIGNETTE_COLOR: Color = Color(0.6, 0.0, 0.0)
+const PROMPT_GRAY: Color = Color(0.55, 0.55, 0.55)
 
 var round_label: Label = _label(64, ROUND_COLOR)
 var points_label: Label = _label(30, TEXT_COLOR)
 var ammo_label: Label = _label(34, TEXT_COLOR)
+var weapon_label: Label = _label(24, TEXT_COLOR)
+var prompt_label: Label = _label(28, TEXT_COLOR)
 var banner: Label = _label(56, TEXT_COLOR)
 var death_screen: Control = Control.new()
 var death_text: Label = _label(28, TEXT_COLOR)
@@ -33,11 +36,20 @@ func _ready() -> void:
 	add_child(round_label)
 	points_label.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT, Control.PRESET_MODE_KEEP_SIZE, 32)
 	add_child(points_label)
-	ammo_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_KEEP_SIZE, 32)
-	ammo_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	ammo_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	ammo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	add_child(ammo_label)
+	var weapon_box: VBoxContainer = VBoxContainer.new()
+	weapon_box.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_KEEP_SIZE, 32)
+	weapon_box.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	weapon_box.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	weapon_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(weapon_box)
+	for label: Label in [weapon_label, ammo_label]:
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		weapon_box.add_child(label)
+	prompt_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	prompt_label.offset_top = 48.0
+	prompt_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_child(prompt_label)
 	banner.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	banner.offset_top = 160.0
 	banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -46,11 +58,13 @@ func _ready() -> void:
 	add_child(banner)
 	_build_overlay(death_screen, Color(0.05, 0.0, 0.0, 0.75), "YOU DIED", death_text)
 	var resume_hint: Label = _label(24, TEXT_COLOR)
-	resume_hint.text = "Esc  resume\n\nWASD  move     Space  jump     Shift  sprint     Ctrl or C  crouch, slide\nLeft mouse  fire     R  reload"
+	resume_hint.text = "Esc  resume\n\nWASD  move     Space  jump     Shift  sprint     Ctrl or C  crouch, slide\nLeft mouse  fire     R  reload     V  knife\nE  buy     Q or mouse wheel  change weapon"
 	_build_overlay(pause_screen, Color(0.0, 0.0, 0.0, 0.6), "PAUSED", resume_hint)
 	set_round(0)
 	set_points(0)
 	set_ammo(0, 0)
+	set_weapon("")
+	set_prompt("", true)
 	set_health(Rules.PLAYER_MAX_HEALTH)
 
 
@@ -71,6 +85,17 @@ func set_points(balance: int) -> void:
 
 func set_ammo(magazine: int, reserve: int) -> void:
 	ammo_label.text = "%d / %d" % [magazine, reserve]
+
+
+func set_weapon(weapon_name: String) -> void:
+	weapon_label.text = weapon_name
+
+
+## "" hides the prompt. A prompt that the player cannot pay for is gray.
+func set_prompt(text: String, affordable: bool) -> void:
+	prompt_label.text = text
+	prompt_label.visible = text != ""
+	prompt_label.modulate = Color.WHITE if affordable else PROMPT_GRAY
 
 
 func set_health(health: float) -> void:
