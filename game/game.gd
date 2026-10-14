@@ -27,7 +27,6 @@ func _ready() -> void:
 	player.name = "Player"
 	add_child(player)
 	player.teleport(arena.player_spawn.origin, arena.player_spawn.basis.get_euler().y)
-	weapon.def = WeaponDef.starting_pistol()
 	player.camera.add_child(weapon)
 	zombies.name = "Zombies"
 	add_child(zombies)
@@ -41,7 +40,7 @@ func _ready() -> void:
 	director.round_cleared.connect(func(_number: int) -> void: hud.show_banner("Round cleared"))
 	director.game_over.connect(_on_game_over)
 	hud.set_points(points.balance)
-	hud.set_ammo(weapon.magazine, weapon.reserve)
+	hud.set_ammo(weapon.current().magazine, weapon.current().reserve)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
@@ -109,7 +108,6 @@ func _on_weapon_hit(target: Zombie, damage: float, kind: Rules.HitKind) -> void:
 
 
 func _on_round_started(round_number: int) -> void:
-	weapon.refill()
 	hud.set_round(round_number)
 	hud.show_banner("Round %d" % round_number)
 

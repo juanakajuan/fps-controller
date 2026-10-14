@@ -6,7 +6,7 @@ const MAIN_SCENE: String = "res://game/main.tscn"
 ## nearest_zombie_m when no zombie is alive, so a wait for "<= N" does not pass early.
 const NO_ZOMBIE_DISTANCE: float = 999.0
 const PHASES: PackedStringArray = ["STARTING", "ACTIVE", "INTERMISSION", "GAME_OVER"]
-const WEAPON_STATES: PackedStringArray = ["READY", "COOLDOWN", "RELOADING", "MELEE"]
+const WEAPON_STATES: PackedStringArray = ["READY", "COOLDOWN", "RELOADING", "MELEE", "SWITCHING"]
 const MOVE_STATES: PackedStringArray = ["GROUND", "AIR", "SLIDE"]
 const STANCES: PackedStringArray = ["STAND", "CROUCH"]
 
@@ -125,8 +125,8 @@ func _state() -> Dictionary:
 		"nearest_zombie_m": snappedf(game.player.global_position.distance_to(nearest.global_position), 0.01) if nearest != null else NO_ZOMBIE_DISTANCE,
 		"points": game.points.balance,
 		"earned": game.points.earned,
-		"magazine": game.weapon.magazine,
-		"reserve": game.weapon.reserve,
+		"magazine": game.weapon.current().magazine,
+		"reserve": game.weapon.current().reserve,
 		"weapon": WEAPON_STATES[game.weapon.state],
 		"health": snappedf(game.player.health, 0.1),
 		"player_alive": game.player.alive,

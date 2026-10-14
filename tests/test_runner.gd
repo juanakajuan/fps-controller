@@ -38,6 +38,8 @@ func run() -> void:
 	test_round_director_spawn_cap()
 	test_round_director_game_over()
 	test_points()
+	test_arsenal()
+	test_loadout()
 	await test_ground_speed()
 	await test_jump_height()
 	await test_air_control()
@@ -56,6 +58,8 @@ func run() -> void:
 	await test_player_health()
 	await test_weapon()
 	await test_melee()
+	await test_weapon_switch()
+	await test_shotgun()
 	await test_arena_navigation()
 	await test_zombie()
 	await test_game()
@@ -648,6 +652,59 @@ func test_rules() -> void:
 		hit_points.append(Rules.points_for_hit(false, kind))
 		kill_points.append(Rules.points_for_hit(true, kind))
 	check(hit_points == [10, 10, 10] and kill_points == [60, 100, 130], "A hit of any kind earns 10. A body kill earns 60, a headshot kill 100, and a melee kill 130")
+	check([Rules.ammo_price(1000), Rules.ammo_price(1200), Rules.ammo_price(1500)] == [500, 600, 750], "Ammo for the 1000, 1200, and 1500 weapons costs 500, 600, and 750")
+
+
+func describe(weapon: WeaponDef) -> String:
+	return "%s %s %.1f x%d %.3f %s %d/%d %.1f %.0f %.1f" % [weapon.id, weapon.display_name, weapon.damage, weapon.pellets, weapon.fire_interval, "auto" if weapon.automatic else "semi", weapon.magazine_size, weapon.reserve_max, weapon.reload_seconds, weapon.range, weapon.spread_degrees]
+
+
+func test_arsenal() -> void:
+	var table: Array[String] = []
+	for weapon: WeaponDef in [Arsenal.pistol(), Arsenal.smg(), Arsenal.shotgun(), Arsenal.rifle(), Arsenal.lmg(), Arsenal.marksman()]:
+		table.append(describe(weapon))
+	check(table == [
+		"pistol Pistol 35.0 x1 0.150 semi 8/80 1.4 100 1.0",
+		"smg SMG 30.0 x1 0.075 auto 30/150 2.0 60 3.0",
+		"shotgun Shotgun 25.0 x8 0.800 semi 6/42 3.0 20 6.0",
+		"rifle Rifle 80.0 x1 0.250 semi 15/90 2.2 150 0.5",
+		"lmg LMG 55.0 x1 0.100 auto 75/300 4.5 120 2.5",
+		"marksman Marksman 250.0 x1 0.900 semi 5/40 3.0 300 0.0",
+	], "The arsenal has the six weapons of the design table")
+	var pool: Array[StringName] = []
+	for weapon: WeaponDef in Arsenal.box_pool():
+		pool.append(weapon.id)
+	check(pool == [&"smg", &"shotgun", &"rifle", &"lmg", &"marksman"], "The box pool is the SMG, the shotgun, the rifle, the LMG, and the marksman")
+
+
+func slot_text(slot: Loadout.Slot) -> String:
+	return "%s %d/%d" % [slot.def.id, slot.magazine, slot.reserve]
+
+
+func loadout_text(loadout: Loadout) -> String:
+	var parts: PackedStringArray = []
+	for index: int in range(loadout.slots.size()):
+		parts.append(("*" if index == loadout.active else "") + slot_text(loadout.slots[index]))
+	return ", ".join(parts)
+
+
+func test_loadout() -> void:
+	var loadout: Loadout = Loadout.new(Arsenal.pistol())
+	check(loadout_text(loadout) == "*pistol 8/80", "A new loadout has one slot with the pistol at 8 and 80")
+	check(not loadout.cycle() and loadout.active == 0, "cycle() with one slot returns false and changes nothing")
+	loadout.current().magazine = 5
+	loadout.give(Arsenal.smg())
+	check(loadout_text(loadout) == "pistol 5/80, *smg 30/150", "give(SMG) adds slot 2 with a full SMG and makes it active")
+	loadout.give(Arsenal.rifle())
+	check(loadout_text(loadout) == "pistol 5/80, *rifle 15/90" and loadout.find(&"smg") == null, "give(rifle) with two slots replaces the SMG in the hands, and the pistol keeps its ammunition")
+	loadout.give(Arsenal.pistol())
+	check(loadout_text(loadout) == "*pistol 8/80, rifle 15/90", "give(pistol) after 3 shots fills the pistol and makes it active")
+	check(loadout.cycle() and loadout_text(loadout) == "pistol 8/80, *rifle 15/90", "cycle() with two slots makes the other slot active")
+	var rifle: Loadout.Slot = loadout.find(&"rifle")
+	rifle.reserve = 0
+	var after_shots: bool = rifle.is_full()
+	rifle.fill()
+	check(not after_shots and rifle.is_full() and slot_text(rifle) == "rifle 15/90", "A slot with an empty reserve is not full, and fill() gives 15 and 90")
 
 
 func clear_round(director: RoundDirector) -> void:
@@ -792,8 +849,7 @@ func test_weapon() -> void:
 	add_box(level, Vector3(0.5, 3.0, 4.0), Vector3(3.0, 1.5, 0.0))
 	var player: Player = spawn(level, tuning(), Vector3.ZERO, 0.0)
 	var weapon: Weapon = Weapon.new()
-	weapon.def = WeaponDef.starting_pistol()
-	weapon.def.spread_degrees = 0.0
+	weapon.loadout = Loadout.new(steady(Arsenal.pistol()))
 	player.camera.add_child(weapon)
 	var ahead: Zombie = make_still_zombie(level, Vector3(0.0, 0.0, -6.0))
 	var behind_wall: Zombie = make_still_zombie(level, Vector3(6.0, 0.0, 0.0))
@@ -806,10 +862,10 @@ func test_weapon() -> void:
 	weapon.reload_started.connect(func() -> void: reloads.append("started %d" % Engine.get_physics_frames()))
 	weapon.reload_finished.connect(func() -> void: reloads.append("finished %d" % Engine.get_physics_frames()))
 	await frames(5)
-	check(weapon.magazine == 8 and weapon.reserve == 80 and weapon.state == Weapon.State.READY, "The starting pistol is READY with 8 in the magazine and 80 in reserve")
+	check(weapon.current().magazine == 8 and weapon.current().reserve == 80 and weapon.state == Weapon.State.READY, "The starting pistol is READY with 8 in the magazine and 80 in reserve")
 	weapon.trigger_held = true
 	await frames(30)
-	check(shots[0] == 1 and weapon.magazine == 7, "Holding the trigger of a semi-automatic weapon for 0.5 s fires once")
+	check(shots[0] == 1 and weapon.current().magazine == 7, "Holding the trigger of a semi-automatic weapon for 0.5 s fires once")
 	check(hits == ["ahead 70.0 HEAD"], "A level shot from 1.65 m eye height hits the zombie 6 m ahead in the head for 70 damage")
 	weapon.trigger_held = false
 	player.look(0.0, -atan(0.65 / 5.65))
@@ -829,7 +885,7 @@ func test_weapon() -> void:
 		weapon.trigger_held = true
 		await frames(1)
 		weapon.trigger_held = false
-	check(shots[0] == 8 and weapon.magazine == 0, "Eight presses empty the 8-round magazine")
+	check(shots[0] == 8 and weapon.current().magazine == 0, "Eight presses empty the 8-round magazine")
 	await frames(12)
 	check(weapon.state == Weapon.State.RELOADING and reloads.size() == 1, "The empty magazine starts a reload by itself")
 	weapon.trigger_held = true
@@ -837,7 +893,7 @@ func test_weapon() -> void:
 	weapon.trigger_held = false
 	check(shots[0] == 8 and weapon.state == Weapon.State.RELOADING, "Presses during the reload do not fire")
 	await frames(30)
-	check(weapon.state == Weapon.State.READY and weapon.magazine == 8 and weapon.reserve == 72, "After the reload the magazine has 8 and the reserve has 72")
+	check(weapon.state == Weapon.State.READY and weapon.current().magazine == 8 and weapon.current().reserve == 72, "After the reload the magazine has 8 and the reserve has 72")
 	var reload_ticks: int = int(reloads[1].split(" ")[1]) - int(reloads[0].split(" ")[1])
 	measure("reload time", reload_ticks * TICK, "s")
 	check(reload_ticks == 84, "The reload takes 84 ticks, which is 1.4 s")
@@ -846,10 +902,16 @@ func test_weapon() -> void:
 	weapon.trigger_held = false
 	weapon.reload_requested = true
 	await frames(12)
-	check(weapon.state == Weapon.State.RELOADING and weapon.magazine == 7, "A reload request with 7 of 8 rounds starts a reload")
-	weapon.refill()
-	check(weapon.state == Weapon.State.READY and weapon.magazine == 8 and weapon.reserve == 80, "refill() ends the reload and fills the magazine and the reserve")
+	check(weapon.state == Weapon.State.RELOADING and weapon.current().magazine == 7, "A reload request with 7 of 8 rounds starts a reload")
+	weapon.fill(&"pistol")
+	check(weapon.state == Weapon.State.READY and weapon.current().magazine == 8 and weapon.current().reserve == 80, "fill() of the weapon in the hands ends its reload and fills the magazine and the reserve")
 	await finish(level)
+
+
+## The weapon with no spread, so a test shot goes where the camera looks.
+func steady(weapon: WeaponDef) -> WeaponDef:
+	weapon.spread_degrees = 0.0
+	return weapon
 
 
 func wait_for_weapon_state(weapon: Weapon, state: Weapon.State, limit: int) -> int:
@@ -865,8 +927,7 @@ func test_melee() -> void:
 	add_box(level, Vector3(0.2, 3.0, 4.0), Vector3(0.8, 1.5, 0.0))
 	var player: Player = spawn(level, tuning(), Vector3.ZERO, 0.0)
 	var weapon: Weapon = Weapon.new()
-	weapon.def = WeaponDef.starting_pistol()
-	weapon.def.spread_degrees = 0.0
+	weapon.loadout = Loadout.new(steady(Arsenal.pistol()))
 	player.camera.add_child(weapon)
 	var ahead: Zombie = make_still_zombie(level, Vector3(0.0, 0.0, -1.5), 1000.0)
 	var behind_wall: Zombie = make_still_zombie(level, Vector3(1.6, 0.0, 0.0), 1000.0)
@@ -901,7 +962,7 @@ func test_melee() -> void:
 	measure("melee time", melee_ticks * TICK, "s")
 	check(melee_ticks == 36, "MELEE lasts 36 ticks, which is 0.6 s, and a second melee request during MELEE does not make it longer")
 	check(shots_in_melee == 0 and hits_in_melee == 1, "A held trigger does not fire during MELEE, and the second melee request does not hit")
-	check(shots[0] == 1 and weapon.magazine == 7 and hits == ["ahead 150.0 MELEE", "ahead 70.0 HEAD"], "The press held through MELEE fires once when MELEE ends")
+	check(shots[0] == 1 and weapon.current().magazine == 7 and hits == ["ahead 150.0 MELEE", "ahead 70.0 HEAD"], "The press held through MELEE fires once when MELEE ends")
 	player.look(-PI * 0.5, 0.0)
 	await frames(12)
 	weapon.melee_requested = true
@@ -918,11 +979,102 @@ func test_melee() -> void:
 	check(weapon.state == Weapon.State.RELOADING and reloads == ["started"], "A reload request with 7 of 8 rounds starts a reload")
 	weapon.melee_requested = true
 	await frames(1)
-	check(weapon.state == Weapon.State.MELEE and weapon.magazine == 7 and weapon.reserve == 80, "A melee interrupts the reload and leaves 7 in the magazine and 80 in reserve")
+	check(weapon.state == Weapon.State.MELEE and weapon.current().magazine == 7 and weapon.current().reserve == 80, "A melee interrupts the reload and leaves 7 in the magazine and 80 in reserve")
 	var restarted_after: int = await wait_for_weapon_state(weapon, Weapon.State.RELOADING, 40)
 	check(restarted_after == 36 and reloads == ["started", "started"], "The reload starts again on the tick that MELEE ends")
 	var finished_after: int = await wait_for_weapon_state(weapon, Weapon.State.READY, 120)
-	check(finished_after == 84 and weapon.magazine == 8 and weapon.reserve == 79 and reloads == ["started", "started", "finished"], "The restarted reload takes the full 84 ticks and loads 1 round from the reserve")
+	check(finished_after == 84 and weapon.current().magazine == 8 and weapon.current().reserve == 79 and reloads == ["started", "started", "finished"], "The restarted reload takes the full 84 ticks and loads 1 round from the reserve")
+	await finish(level)
+
+
+func ticks_in_state(weapon: Weapon, state: Weapon.State, limit: int) -> int:
+	var ticks: int = 0
+	while weapon.state == state and ticks < limit:
+		await physics_frame
+		ticks += 1
+	return ticks
+
+
+func test_weapon_switch() -> void:
+	var level: Node3D = make_level()
+	var player: Player = spawn(level, tuning(), Vector3.ZERO, 0.0)
+	var weapon: Weapon = Weapon.new()
+	weapon.loadout = Loadout.new(Arsenal.pistol())
+	weapon.loadout.give(Arsenal.smg())
+	weapon.loadout.find(&"pistol").magazine = 5
+	weapon.loadout.find(&"smg").magazine = 12
+	player.camera.add_child(weapon)
+	var events: Array[String] = []
+	weapon.equipped.connect(func(def: WeaponDef) -> void: events.append("equipped %s" % def.id))
+	weapon.ammo_changed.connect(func(magazine: int, reserve: int) -> void: events.append("ammo %d/%d" % [magazine, reserve]))
+	var shots: Array[int] = [0]
+	weapon.fired.connect(func() -> void: shots[0] += 1)
+	await frames(5)
+	weapon.switch_requested = true
+	await frames(1)
+	check(weapon.state == Weapon.State.SWITCHING and weapon.current().def.id == &"pistol" and events == ["equipped pistol", "ammo 5/80"], "A switch request makes the pistol active on the first tick of SWITCHING and reports it with its 5 and 80")
+	var switch_ticks: int = await ticks_in_state(weapon, Weapon.State.SWITCHING, 60)
+	measure("weapon change time", switch_ticks * TICK, "s")
+	check(switch_ticks == 30 and weapon.state == Weapon.State.READY, "SWITCHING lasts 30 ticks, which is 0.5 s")
+	check(loadout_text(weapon.loadout) == "*pistol 5/80, smg 12/150", "A change keeps the ammunition of both slots")
+	weapon.reload_requested = true
+	await frames(30)
+	check(weapon.state == Weapon.State.RELOADING, "A reload request with 5 of 8 rounds starts a reload")
+	weapon.switch_requested = true
+	await frames(1)
+	check(weapon.state == Weapon.State.SWITCHING and loadout_text(weapon.loadout) == "pistol 5/80, *smg 12/150", "A change during the reload stops it with no change to the ammunition")
+	await ticks_in_state(weapon, Weapon.State.SWITCHING, 60)
+	weapon.switch_requested = true
+	await frames(1)
+	await ticks_in_state(weapon, Weapon.State.SWITCHING, 60)
+	await frames(10)
+	check(weapon.state == Weapon.State.READY and loadout_text(weapon.loadout) == "*pistol 5/80, smg 12/150", "Back on the pistol, the stopped reload does not start again")
+	weapon.melee_requested = true
+	await frames(1)
+	weapon.switch_requested = true
+	await frames(1)
+	check(weapon.state == Weapon.State.MELEE and weapon.current().def.id == &"pistol", "A switch request during MELEE is cleared and does nothing")
+	await wait_for_weapon_state(weapon, Weapon.State.READY, 60)
+	weapon.equip(Arsenal.rifle())
+	check(weapon.state == Weapon.State.SWITCHING and loadout_text(weapon.loadout) == "*rifle 15/90, smg 12/150", "equip() of a third weapon replaces the pistol in the hands and starts SWITCHING")
+	weapon.trigger_held = true
+	var fired_at: int = -1
+	for tick: int in range(1, 61):
+		await physics_frame
+		if fired_at < 0 and shots[0] > 0:
+			fired_at = tick
+	weapon.trigger_held = false
+	check(shots[0] == 1 and fired_at == 30 and weapon.current().magazine == 14, "A press held through SWITCHING fires one time, on the tick that SWITCHING ends")
+	weapon.loadout = Loadout.new(Arsenal.pistol())
+	events.clear()
+	weapon.switch_requested = true
+	await frames(1)
+	check(weapon.state != Weapon.State.SWITCHING and events.is_empty() and weapon.loadout.active == 0, "A switch request with one slot does nothing")
+	await finish(level)
+
+
+func test_shotgun() -> void:
+	var level: Node3D = make_level()
+	var player: Player = spawn(level, tuning(), Vector3.ZERO, 0.0)
+	var weapon: Weapon = Weapon.new()
+	weapon.loadout = Loadout.new(steady(Arsenal.shotgun()))
+	player.camera.add_child(weapon)
+	var ahead: Zombie = make_still_zombie(level, Vector3(0.0, 0.0, -3.0), 1000.0)
+	var hits: Array[String] = []
+	weapon.hit.connect(func(target: Zombie, damage: float, kind: Rules.HitKind) -> void:
+		hits.append("%s %.1f %s" % ["ahead" if target == ahead else "other", damage, Rules.HitKind.find_key(kind)]))
+	player.look(0.0, -atan(0.65 / 2.65))
+	await frames(5)
+	weapon.trigger_held = true
+	await frames(1)
+	weapon.trigger_held = false
+	check(hits == ["ahead 200.0 BODY"] and weapon.current().magazine == 5, "A shotgun shot with no spread at a zombie 3 m ahead emits one hit for 8 x 25 = 200 damage of kind BODY")
+	player.look(0.0, atan(0.65 / 2.65))
+	await frames(60)
+	weapon.trigger_held = true
+	await frames(1)
+	weapon.trigger_held = false
+	check(hits == ["ahead 200.0 BODY", "ahead 400.0 HEAD"], "A level shotgun shot hits the head with all 8 pellets for 400 damage of kind HEAD")
 	await finish(level)
 
 
@@ -1047,12 +1199,12 @@ func test_game() -> void:
 	game.weapon.trigger_held = true
 	await frames(2)
 	game.weapon.trigger_held = false
-	check(game.weapon.magazine == 7, "A shot in the intermission leaves 7 rounds")
+	check(game.weapon.current().magazine == 7, "A shot in the intermission leaves 7 rounds")
 	for tick: int in range(660):
 		await physics_frame
 		if game.director.phase == RoundDirector.Phase.ACTIVE:
 			break
-	check(game.director.round_number == 2 and game.weapon.magazine == 8 and game.hud.round_label.text == "2", "Round 2 starts after the intermission, refills the weapon, and shows round 2")
+	check(game.director.round_number == 2 and game.weapon.current().magazine == 7 and game.weapon.current().reserve == 80 and game.hud.round_label.text == "2", "Round 2 starts after the intermission, shows round 2, and does not refill the weapon")
 	var second: Zombie = live_zombies(game)[0]
 	check(second.health == 250.0, "A round 2 zombie has 250 health")
 	place_in_front(game, second, 1.5)
@@ -1098,7 +1250,7 @@ func test_game_melee() -> void:
 	game.weapon.melee_requested = true
 	await frames(1)
 	check(first.state == Zombie.State.DEAD and game.points.balance == 630 and game.hud.points_label.text == "630", "One melee kills a round 1 zombie and earns 130 points")
-	check(game.weapon.magazine == 8 and game.weapon.reserve == 80, "The melee uses no ammunition")
+	check(game.weapon.current().magazine == 8 and game.weapon.current().reserve == 80, "The melee uses no ammunition")
 	current_scene = null
 	game.queue_free()
 	await physics_frame

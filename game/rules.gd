@@ -29,6 +29,13 @@ const WALKER_SPEED: float = 1.6
 const JOGGER_SPEED: float = 3.2
 const RUNNER_SPEED: float = 5.0
 
+const LOADOUT_SIZE: int = 2
+const INTERACT_RANGE: float = 2.5
+const SWITCH_SECONDS: float = 0.5
+const BOX_PRICE: int = 950
+const BOX_ROLL_SECONDS: float = 4.0
+const BOX_OFFER_SECONDS: float = 10.0
+
 
 static func zombie_count(round_number: int) -> int:
 	var count: int = 6 + 3 * (round_number - 1)
@@ -67,3 +74,7 @@ static func points_for_hit(killed: bool, kind: HitKind) -> int:
 		HitKind.MELEE:
 			return POINTS_MELEE_KILL
 	return POINTS_KILL
+
+
+static func ammo_price(weapon_price: int) -> int:
+	return floori(weapon_price / 2.0)
