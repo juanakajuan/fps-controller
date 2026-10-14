@@ -1,0 +1,26 @@
+# Movement: walk, sprint, crouch-slide, jump. The player turns to +Z first: that lane is clear for 14 m.
+wait 0.5
+look 1800 0
+wait 0.1
+expect yaw_deg == -180
+press W
+wait 0.5
+expect speed >= 6.5
+press Shift
+wait 0.6
+expect speed >= 10
+press C
+wait 0.05
+state
+expect move_state == SLIDE
+shot slide
+release C
+release Shift
+release W
+wait 1
+tap Space
+wait 0.1
+expect move_state == AIR
+wait 1
+expect move_state == GROUND
+state

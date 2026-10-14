@@ -1,0 +1,16 @@
+# Pause: Esc stops the world and frees the mouse. Esc again resumes.
+wait_until phase == ACTIVE 10
+tap Escape
+wait 0.2
+state
+expect paused == true
+expect hud_pause == true
+expect mouse_captured == false
+shot paused
+wait 2
+expect paused == true
+tap Escape
+wait 0.2
+expect paused == false
+expect hud_pause == false
+expect mouse_captured == true

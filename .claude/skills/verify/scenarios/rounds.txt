@@ -1,0 +1,12 @@
+# Rounds: clear round 1 with the pistol, see "Round cleared", then round 2 starts with full ammo.
+wait_until phase == ACTIVE 10
+expect hud_round == 1
+fight 120 head
+wait_until phase == INTERMISSION 5
+state
+expect hud_banner == Round cleared
+shot round-cleared
+wait_until round == 2 15
+state
+expect hud_round == 2
+expect hud_ammo == 8 / 80

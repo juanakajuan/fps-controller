@@ -1,0 +1,11 @@
+# Knife: V hits one zombie at 2 m or less for 150 damage. A round-1 zombie dies in one hit: +130 points.
+wait_until nearest_zombie_m <= 1.8 60
+aim_nearest body
+tap V
+wait 0.05
+expect weapon == MELEE
+shot knife
+wait 0.3
+state
+expect earned >= 130
+expect hud_ammo == 8 / 80

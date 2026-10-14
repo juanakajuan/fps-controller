@@ -1,0 +1,26 @@
+# Pistol: fire, hit a zombie for points, reload with R.
+wait_until phase == ACTIVE 10
+state
+expect hud_ammo == 8 / 80
+expect points == 500
+# Pistol spread misses at long range. Let a zombie come within 8 m.
+wait_until nearest_zombie_m <= 8 40
+aim_nearest body
+shot before-fire
+click
+wait 0.03
+shot muzzle-flash
+wait 0.3
+state
+expect magazine == 7
+expect hud_ammo == 7 / 80
+expect earned >= 10
+expect hud_points != 500
+tap R
+wait 0.3
+expect weapon == RELOADING
+shot reloading
+wait 2.0
+state
+expect weapon == READY
+expect hud_ammo == 8 / 79

@@ -1,1 +1,4 @@
 .godot/
+
+# Evidence from .claude/skills/verify runs
+.verify/

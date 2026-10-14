@@ -1,0 +1,16 @@
+# Death and restart: stand still until zombies kill the player, then Enter starts a new game.
+wait_until player_alive == false 180
+wait 0.3
+state
+expect phase == GAME_OVER
+expect hud_death == true
+expect hud_death_text contains You survived 0 rounds.
+expect mouse_captured == false
+shot death
+tap Enter
+wait 1
+state
+expect phase == STARTING
+expect hud_death == false
+expect points == 500
+expect health == 100
