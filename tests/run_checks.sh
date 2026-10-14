@@ -22,7 +22,7 @@ run_suite() {
 	output="$(godot --headless --path . -s tests/test_runner.gd 2>&1)" || status=$?
 	echo "Test suite on $engine:"
 	grep -E 'RESULT|FAIL|SCRIPT ERROR' <<<"$output" || true
-	if [[ $status -ne 0 ]] || ! grep -q 'RESULT: [0-9]* checks, 0 failures' <<<"$output"; then
+	if [[ $status -ne 0 ]] || grep -q 'SCRIPT ERROR' <<<"$output" || ! grep -q 'RESULT: [0-9]* checks, 0 failures' <<<"$output"; then
 		echo "FAIL: test suite on $engine"
 		exit 1
 	fi
