@@ -97,12 +97,12 @@ func _spawn_zombie() -> void:
 
 
 ## A zombie can die and free in the same tick as a second ray, so the target is checked.
-func _on_weapon_hit(target: Zombie, damage: float, headshot: bool) -> void:
+func _on_weapon_hit(target: Zombie, damage: float, kind: Rules.HitKind) -> void:
 	if not is_instance_valid(target) or target.state == Zombie.State.DEAD:
 		return
-	target.take_damage(damage, headshot)
+	target.take_damage(damage, kind == Rules.HitKind.HEAD)
 	var killed: bool = target.state == Zombie.State.DEAD
-	points.earn(Rules.points_for_hit(killed, headshot))
+	points.earn(Rules.points_for_hit(killed, kind))
 	hud.show_hit(killed)
 
 

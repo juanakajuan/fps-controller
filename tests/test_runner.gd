@@ -639,7 +639,13 @@ func test_rules() -> void:
 	check(round_one == [1.6, 1.6, 1.6, 1.6, 1.6, 1.6], "Round 1 has only walkers at 1.6 m/s")
 	check(round_five == [5.0, 5.0, 3.2, 3.2, 1.6, 1.6], "Round 5 has 24% runners, 60% joggers, and 16% walkers")
 	check(round_ten == [5.0, 5.0, 5.0, 5.0, 3.2, 3.2], "Round 10 has 80% runners and 20% joggers")
-	check([Rules.points_for_hit(false, false), Rules.points_for_hit(false, true), Rules.points_for_hit(true, false), Rules.points_for_hit(true, true)] == [10, 10, 60, 100], "A hit earns 10, a kill 60, and a headshot kill 100")
+	var kinds: Array[Rules.HitKind] = [Rules.HitKind.BODY, Rules.HitKind.HEAD, Rules.HitKind.MELEE]
+	var hit_points: Array[int] = []
+	var kill_points: Array[int] = []
+	for kind: Rules.HitKind in kinds:
+		hit_points.append(Rules.points_for_hit(false, kind))
+		kill_points.append(Rules.points_for_hit(true, kind))
+	check(hit_points == [10, 10, 10] and kill_points == [60, 100, 130], "A hit of any kind earns 10. A body kill earns 60, a headshot kill 100, and a melee kill 130")
 
 
 func clear_round(director: RoundDirector) -> void:
@@ -793,8 +799,8 @@ func test_weapon() -> void:
 	var hits: Array[String] = []
 	var reloads: Array[String] = []
 	weapon.fired.connect(func() -> void: shots[0] += 1)
-	weapon.hit.connect(func(target: Zombie, damage: float, headshot: bool) -> void:
-		hits.append("%s %.1f %s" % ["ahead" if target == ahead else "other", damage, "head" if headshot else "body"]))
+	weapon.hit.connect(func(target: Zombie, damage: float, kind: Rules.HitKind) -> void:
+		hits.append("%s %.1f %s" % ["ahead" if target == ahead else "other", damage, Rules.HitKind.find_key(kind)]))
 	weapon.reload_started.connect(func() -> void: reloads.append("started %d" % Engine.get_physics_frames()))
 	weapon.reload_finished.connect(func() -> void: reloads.append("finished %d" % Engine.get_physics_frames()))
 	await frames(5)
@@ -802,14 +808,14 @@ func test_weapon() -> void:
 	weapon.trigger_held = true
 	await frames(30)
 	check(shots[0] == 1 and weapon.magazine == 7, "Holding the trigger of a semi-automatic weapon for 0.5 s fires once")
-	check(hits == ["ahead 70.0 head"], "A level shot from 1.65 m eye height hits the zombie 6 m ahead in the head for 70 damage")
+	check(hits == ["ahead 70.0 HEAD"], "A level shot from 1.65 m eye height hits the zombie 6 m ahead in the head for 70 damage")
 	weapon.trigger_held = false
 	player.look(0.0, -atan(0.65 / 5.65))
 	await frames(2)
 	weapon.trigger_held = true
 	await frames(1)
 	weapon.trigger_held = false
-	check(shots[0] == 2 and hits == ["ahead 70.0 head", "ahead 35.0 body"], "A press aimed at 1.0 m height hits the body for 35 damage")
+	check(shots[0] == 2 and hits == ["ahead 70.0 HEAD", "ahead 35.0 BODY"], "A press aimed at 1.0 m height hits the body for 35 damage")
 	player.look(-PI * 0.5, atan(0.65 / 5.65))
 	await frames(12)
 	weapon.trigger_held = true
@@ -939,17 +945,17 @@ func test_game() -> void:
 	check(game.hud.round_label.text == "1" and game.hud.points_label.text == "500" and game.hud.ammo_label.text == "8 / 80", "The HUD shows round 1, 500 points, and 8 / 80 ammo")
 	var first: Zombie = live_zombies(game)[0]
 	check(first.health == 150.0 and first.speed == 1.6, "A round 1 zombie has 150 health and walks at 1.6 m/s")
-	game.weapon.hit.emit(first, 35.0, false)
+	game.weapon.hit.emit(first, 35.0, Rules.HitKind.BODY)
 	check(game.points.balance == 510 and first.health == 115.0, "A body hit for 35 earns 10 points")
-	game.weapon.hit.emit(first, 200.0, false)
+	game.weapon.hit.emit(first, 200.0, Rules.HitKind.BODY)
 	check(game.points.balance == 570 and first.state == Zombie.State.DEAD, "A body kill earns 60 points")
-	game.weapon.hit.emit(first, 200.0, true)
+	game.weapon.hit.emit(first, 200.0, Rules.HitKind.HEAD)
 	check(game.points.balance == 570, "A hit on a dead zombie earns nothing")
 	var headshot_done: bool = false
 	for tick: int in range(900):
 		await physics_frame
 		for zombie: Zombie in live_zombies(game):
-			game.weapon.hit.emit(zombie, 1000.0, not headshot_done)
+			game.weapon.hit.emit(zombie, 1000.0, Rules.HitKind.BODY if headshot_done else Rules.HitKind.HEAD)
 			if not headshot_done:
 				check(game.points.balance == 670, "A headshot kill earns 100 points")
 				headshot_done = true

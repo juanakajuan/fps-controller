@@ -4,7 +4,7 @@ extends Node3D
 enum State { READY, COOLDOWN, RELOADING }
 
 signal fired
-signal hit(target: Zombie, damage: float, headshot: bool)
+signal hit(target: Zombie, damage: float, kind: Rules.HitKind)
 signal ammo_changed(magazine: int, reserve: int)
 signal reload_started
 signal reload_finished
@@ -131,7 +131,10 @@ func _cast_ray() -> void:
 		return
 	var point: Vector3 = result["position"]
 	var headshot: bool = point.y - target.global_position.y >= Rules.ZOMBIE_HEAD_HEIGHT
-	hit.emit(target, def.damage * (Rules.HEADSHOT_MULTIPLIER if headshot else 1.0), headshot)
+	if headshot:
+		hit.emit(target, def.damage * Rules.HEADSHOT_MULTIPLIER, Rules.HitKind.HEAD)
+	else:
+		hit.emit(target, def.damage, Rules.HitKind.BODY)
 
 
 func _build_model() -> void:
