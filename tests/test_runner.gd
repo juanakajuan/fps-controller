@@ -57,6 +57,7 @@ func run() -> void:
 	await test_weapon()
 	await test_arena_navigation()
 	await test_zombie()
+	await test_game()
 	print("RESULT: %d checks, %d failures" % [checks, failures])
 	quit(1 if failures > 0 else 0)
 
@@ -900,3 +901,94 @@ func test_zombie() -> void:
 	await frames(40)
 	check(not is_instance_valid(zombie), "The dead zombie frees itself 1.0 s after death")
 	await finish(arena)
+
+
+func start_game() -> Game:
+	var game: Game = (load("res://game/main.tscn") as PackedScene).instantiate() as Game
+	root.add_child(game)
+	current_scene = game
+	game.player.player_controlled = false
+	return game
+
+
+func live_zombies(game: Game) -> Array[Zombie]:
+	var found: Array[Zombie] = []
+	for child: Node in game.zombies.get_children():
+		var zombie: Zombie = child as Zombie
+		if zombie.state != Zombie.State.DEAD:
+			found.append(zombie)
+	return found
+
+
+func send_action(action: StringName) -> void:
+	var event: InputEventAction = InputEventAction.new()
+	event.action = action
+	event.pressed = true
+	Input.parse_input_event(event)
+
+
+func test_game() -> void:
+	var game: Game = start_game()
+	var started: int = -1
+	for tick: int in range(1, 241):
+		await physics_frame
+		if game.director.phase == RoundDirector.Phase.ACTIVE:
+			started = tick
+			break
+	check(started >= 179 and started <= 181 and game.director.round_number == 1 and live_zombies(game).size() == 1, "Round 1 starts 3 s after the game starts and spawns one zombie")
+	check(game.hud.round_label.text == "1" and game.hud.points_label.text == "500" and game.hud.ammo_label.text == "8 / 80", "The HUD shows round 1, 500 points, and 8 / 80 ammo")
+	var first: Zombie = live_zombies(game)[0]
+	check(first.health == 150.0 and first.speed == 1.6, "A round 1 zombie has 150 health and walks at 1.6 m/s")
+	game.weapon.hit.emit(first, 35.0, false)
+	check(game.points.balance == 510 and first.health == 115.0, "A body hit for 35 earns 10 points")
+	game.weapon.hit.emit(first, 200.0, false)
+	check(game.points.balance == 570 and first.state == Zombie.State.DEAD, "A body kill earns 60 points")
+	game.weapon.hit.emit(first, 200.0, true)
+	check(game.points.balance == 570, "A hit on a dead zombie earns nothing")
+	var headshot_done: bool = false
+	for tick: int in range(900):
+		await physics_frame
+		for zombie: Zombie in live_zombies(game):
+			game.weapon.hit.emit(zombie, 1000.0, not headshot_done)
+			if not headshot_done:
+				check(game.points.balance == 670, "A headshot kill earns 100 points")
+				headshot_done = true
+		if game.director.phase == RoundDirector.Phase.INTERMISSION:
+			break
+	check(game.director.phase == RoundDirector.Phase.INTERMISSION and game.director.rounds_survived() == 1, "Killing all 6 zombies of round 1 clears it into INTERMISSION")
+	check(game.points.balance == 910 and game.points.earned == 410, "Round 1 earns 10 + 60 + 100 + 4 x 60 = 410 points, for a balance of 910")
+	game.weapon.trigger_held = true
+	await frames(2)
+	game.weapon.trigger_held = false
+	check(game.weapon.magazine == 7, "A shot in the intermission leaves 7 rounds")
+	for tick: int in range(660):
+		await physics_frame
+		if game.director.phase == RoundDirector.Phase.ACTIVE:
+			break
+	check(game.director.round_number == 2 and game.weapon.magazine == 8 and game.hud.round_label.text == "2", "Round 2 starts after the intermission, refills the weapon, and shows round 2")
+	var second: Zombie = live_zombies(game)[0]
+	check(second.health == 250.0, "A round 2 zombie has 250 health")
+	send_action(&"pause")
+	await frames(30)
+	var paused_position: Vector3 = second.global_position
+	await frames(30)
+	check(paused and game.hud.pause_screen.visible and second.global_position == paused_position, "Pause stops the zombies and shows the pause screen")
+	send_action(&"pause")
+	await frames(2)
+	check(not paused and not game.hud.pause_screen.visible, "A second pause press resumes the game")
+	game.player.take_damage(100.0)
+	await frames(1)
+	check(game.director.phase == RoundDirector.Phase.GAME_OVER and game.hud.death_screen.visible, "Player death ends the game and shows the death screen")
+	check(game.hud.death_text.text.begins_with("You survived 1 round.\nYou earned 410 points."), "The death screen shows 1 round survived and 410 points earned")
+	check(Input.mouse_mode == Input.MOUSE_MODE_VISIBLE, "Death releases the mouse")
+	var spawned_after: int = game.zombies.get_child_count()
+	await frames(150)
+	check(game.zombies.get_child_count() <= spawned_after, "No zombie spawns after the game is over")
+	send_action(&"restart")
+	await frames(3)
+	var fresh: Game = current_scene as Game
+	check(fresh != null and fresh != game and not is_instance_valid(game), "Enter after death reloads the scene with a new Game")
+	check(fresh.director.phase == RoundDirector.Phase.STARTING and fresh.points.balance == 500 and fresh.player.alive, "The new game starts over with 500 points and a living player")
+	current_scene = null
+	fresh.queue_free()
+	await physics_frame

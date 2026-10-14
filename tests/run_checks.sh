@@ -45,3 +45,4 @@ printf '[physics]\n\n3d/physics_engine="GodotPhysics3D"\n' >override.cfg
 run_suite "Godot Physics"
 rm -f override.cfg
 
+fail_on_output "launch the game for 600 frames" godot --headless --path . --quit-after 600
