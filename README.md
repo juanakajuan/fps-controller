@@ -93,7 +93,7 @@ The test suite prints `PASS` or `FAIL` for each check, a `MEASURE` line for each
 The visual smoke test opens a window, so it needs a display. It plays the game for 3 seconds and saves one frame as a PNG file. It fails if the frame is blank:
 
 ```sh
-godot --path . --script tests/visual_smoke.gd -- /tmp/hold_the_yard.png
+godot --path . --script tests/visual_smoke.gd -- /tmp/zombie_survival_fps.png
 ```
 
 If you do not give a path, the file is `user://visual_smoke.png`.
