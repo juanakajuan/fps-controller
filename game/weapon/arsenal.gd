@@ -90,6 +90,14 @@ static func box_pool() -> Array[WeaponDef]:
 	return [smg(), shotgun(), rifle(), lmg(), marksman()]
 
 
+## Returns null for an id that no weapon has.
+static func find(id: StringName) -> WeaponDef:
+	for weapon: WeaponDef in [pistol(), smg(), shotgun(), rifle(), lmg(), marksman()]:
+		if weapon.id == id:
+			return weapon
+	return null
+
+
 static func _weapon(id: StringName, display_name: String, damage: float, pellets: int, fire_interval: float, automatic: bool, magazine_size: int, reserve_max: int, reload_seconds: float, weapon_range: float, spread_degrees: float) -> WeaponDef:
 	var weapon: WeaponDef = WeaponDef.new()
 	weapon.id = id

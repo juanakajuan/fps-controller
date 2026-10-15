@@ -9,14 +9,16 @@ const DRAWING_SCALE: float = 3.0
 ## The interact area stands out from the wall, so the ray finds it before the wall.
 const AREA_DEPTH: float = 0.3
 
+## The id of an Arsenal weapon. The arena scene sets it.
+@export var weapon_id: StringName = &"":
+	set(id):
+		weapon_id = id
+		weapon_def = Arsenal.find(id)
+		if weapon_def == null:
+			push_error("WallBuy: no Arsenal weapon has the id \"%s\"." % id)
+@export_range(0, 10000, 10) var price: int = 0
+
 var weapon_def: WeaponDef
-var price: int
-
-
-func _init(weapon: WeaponDef, weapon_price: int) -> void:
-	super()
-	weapon_def = weapon
-	price = weapon_price
 
 
 func _ready() -> void:

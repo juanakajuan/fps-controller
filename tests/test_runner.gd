@@ -715,7 +715,9 @@ func offer_text(offer: Station.Offer) -> String:
 
 
 func test_wall_buy_offer() -> void:
-	var wall: WallBuy = WallBuy.new(Arsenal.smg(), 1000)
+	var wall: WallBuy = WallBuy.new()
+	wall.weapon_id = &"smg"
+	wall.price = 1000
 	var loadout: Loadout = Loadout.new(Arsenal.pistol())
 	check(offer_text(wall.offer(loadout)) == "WEAPON 1000 \"Buy SMG\" smg" and loadout_text(loadout) == "*pistol 8/80", "Without the SMG the wall offers the SMG for 1000, and the offer changes nothing")
 	loadout.give(Arsenal.smg())
@@ -1136,9 +1138,8 @@ func test_shotgun() -> void:
 
 ## The navigation map takes a few physics ticks to take in the baked region.
 func make_arena() -> Arena:
-	var arena: Arena = Arena.new()
+	var arena: Arena = Game.ARENA_SCENE.instantiate() as Arena
 	root.add_child(arena)
-	arena.build()
 	var map: RID = arena.get_world_3d().navigation_map
 	for tick: int in range(30):
 		if not NavigationServer3D.map_get_path(map, arena.player_spawn.origin, arena.zombie_spawns[0], true).is_empty():
@@ -1147,10 +1148,27 @@ func make_arena() -> Arena:
 	return arena
 
 
+## The scene stores a collision box and a mesh box for each body. A hand edit can change one and not the other.
+func arena_shape_problems(arena: Arena) -> PackedStringArray:
+	var problems: PackedStringArray = []
+	for node: Node in arena.find_children("*", "StaticBody3D"):
+		var body: StaticBody3D = node as StaticBody3D
+		var shape: BoxShape3D = (body.get_node(^"Shape") as CollisionShape3D).shape as BoxShape3D
+		var mesh: BoxMesh = (body.get_node(^"Mesh") as MeshInstance3D).mesh as BoxMesh
+		if body.collision_layer != Layers.WORLD or shape.size != mesh.size:
+			problems.append(str(arena.get_path_to(body)))
+	return problems
+
+
 func test_arena_navigation() -> void:
 	var arena: Arena = await make_arena()
 	check(arena.navigation.navigation_mesh.get_polygon_count() > 0 and arena.zombie_spawns.size() == 8, "The arena bakes a navigation mesh and has 8 zombie spawn points")
-	check(arena.stations.size() == 4 and arena.stations[3] == arena.box, "The arena has three wall buys and the box")
+	check(arena.stations.size() == 4 and arena.box != null and arena.box in arena.stations, "The arena has three wall buys and the box")
+	check(arena_shape_problems(arena).is_empty(), "Each static body in the arena scene is on Layers.WORLD, and its collision box is the size of its mesh box: %s" % ", ".join(arena_shape_problems(arena)))
+	var nav_mesh: NavigationMesh = arena.navigation.navigation_mesh
+	check(is_equal_approx(nav_mesh.agent_height, Zombie.HEIGHT) and nav_mesh.geometry_collision_mask == Layers.WORLD and is_equal_approx(nav_mesh.cell_height, NavigationServer3D.map_get_cell_height(arena.get_world_3d().navigation_map)), "The navigation mesh uses the zombie height, the world layer, and the cell height of the navigation map")
+	var crate_shape: BoxShape3D = (arena.box.get_parent().get_node(^"Shape") as CollisionShape3D).shape as BoxShape3D
+	check(crate_shape.size == MysteryBox.CRATE_SIZE, "The box crate in the arena scene is MysteryBox.CRATE_SIZE")
 	var map: RID = arena.get_world_3d().navigation_map
 	var path: PackedVector3Array = NavigationServer3D.map_get_path(map, Vector3(-10.0, 0.0, -3.0), Vector3(-10.0, 1.5, -10.0), true)
 	var via_ramp: bool = false

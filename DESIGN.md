@@ -4,7 +4,7 @@
 
 A round-based survival FPS for Godot 4.7, in GDScript only. The player fights waves of undead. Each round has more zombies, and the zombies have more health and more speed. The player earns points for hits and kills. The game ends when the player dies. The score is the number of rounds the player survived.
 
-The game builds all nodes, geometry, materials, input actions, and UI in code. It uses no external assets.
+The world and its visuals are in scenes: `game/level/arena.tscn` holds the geometry, the materials, the lights, the stations, and the spawn markers, so the map shows in the Godot editor and you can edit it by hand. The rules, the player, the weapons, the zombies, the input actions, and the UI stay in code. The game uses no external assets. "World in scenes, rules in code" below gives the reasons.
 
 ## Milestones
 
@@ -15,10 +15,22 @@ The game builds all nodes, geometry, materials, input actions, and UI in code. I
 
 Milestone 1 must not add speculative hooks for milestones 2 to 4. It must keep two shapes that the later milestones need: points are a balance that can go down (`spend`), and a weapon is data (`WeaponDef`) and not code.
 
+## World in scenes, rules in code
+
+Milestones 1 and 2 built the whole world in code. The Godot editor then showed an empty viewport, and a map change was a change to coordinates in `arena.gd`. The arena is now a scene. The decision:
+
+- **In scenes:** geometry, collision, materials, lights, the environment, spawn markers, and the placement of stations. A person edits these by sight in the editor.
+- **In code:** `Rules`, `RoundDirector`, `Points`, weapons, zombies, the player, the HUD, input actions, and the station visuals (`WallBuy` and `MysteryBox` draw their weapon from `WeaponDef` data in `_ready()`, so they show only when the game runs). Pure rules keep fast exact tests with no scene tree.
+- **Stations:** a wall buy in the scene sets two exported fields, `weapon_id` (an `Arsenal` id) and `price`. `Arena` finds every `Station` node, so a new wall buy needs no code change.
+- **Navigation:** the scene stores the `NavigationMesh` settings with no polygons, and `Arena` bakes at `_ready()`. A mesh baked in the editor and saved goes stale after the next hand edit of the geometry. A bake at run time always matches the scene. The editor "Bake NavigationMesh" button still works, to look at the mesh.
+- **Rejected:** an `@tool` arena script that builds the nodes in the editor. The nodes show, but they are not saved, so a person cannot edit them.
+
+Each static body stores a `BoxShape3D` and a `BoxMesh` of the same size. A hand edit can change one and not the other, so a test checks that the two sizes are equal and that each body is on `Layers.WORLD`.
+
 ## Usage
 
 ```gdscript
-# game/main.tscn has one node with game/game.gd. Game builds everything:
+# game/main.tscn has one node with game/game.gd. Game instances game/level/arena.tscn and builds the rest:
 var game: Game = Game.new()
 get_tree().root.add_child(game)
 
@@ -75,7 +87,10 @@ Then move and rename. The player is a part of the game now, not an addon:
 - `game/weapon/weapon_def.gd`. `class_name WeaponDef extends Resource`. Data for one weapon.
 - `game/weapon/weapon.gd`. `class_name Weapon extends Node3D`. A child of the player camera. Fire, reload, hitscan, and a box view model.
 - `game/zombie/zombie.gd`. `class_name Zombie extends CharacterBody3D`. Chase, attack, die.
-- `game/level/arena.gd`. `class_name Arena extends Node3D`. Floor, walls, cover blocks, lights, the baked navigation mesh, the player spawn, and the zombie spawn points.
+- `game/level/arena.tscn`. The map scene: floor, walls, cover blocks, the platform with stairs and ramp, lamps, the sky and moon, the three wall buys, the box crate with the box, the `PlayerSpawn` marker, and the `ZombieSpawns` markers. All static bodies are under the `Navigation` region.
+- `game/level/arena.gd`. `class_name Arena extends Node3D`. The script of `arena.tscn`. It reads the spawn markers and the stations, and bakes the navigation mesh at `_ready()`.
+- `game/level/lamp.tscn`. One lamp: a post, a bulb, and a light. The arena has four instances.
+- `game/level/grid.gdshader` and `game/level/materials/*.tres`. The grid shader and one material for each surface color.
 - `game/hud.gd`. `class_name Hud extends CanvasLayer`. Round number, points, ammo, health vignette, crosshair, hit marker, round banner, death screen, pause screen.
 - `tests/test_runner.gd`. The movement tests (renamed), plus the game tests below.
 - `tests/visual_smoke.gd`. A windowed launch of `game/main.tscn` that captures one frame.
@@ -260,14 +275,18 @@ func take_damage(amount: float) -> void   # no effect when not alive. At 0: aliv
 Collision layers: 1 world, 2 player, 3 zombies. The player collides with 1 and 3. Zombies collide with 1 and 2. The weapon ray uses mask 1 and 3.
 
 ```gdscript
-class_name Arena extends Node3D
+class_name Arena extends Node3D   # the script of game/level/arena.tscn
 
-var player_spawn: Transform3D
-var zombie_spawns: Array[Vector3]
-var navigation: NavigationRegion3D
+var player_spawn: Transform3D           # from the PlayerSpawn marker
+var zombie_spawns: Array[Vector3]       # from the markers under ZombieSpawns
+var navigation: NavigationRegion3D      # the Navigation node
+var stations: Array[Station]            # every Station in the scene, in tree order
+var box: MysteryBox
 
-func build() -> void   # geometry and a synchronous navigation bake, before the first physics tick
+func _ready() -> void   # reads the markers and does a synchronous navigation bake, before the first physics tick
 ```
+
+`Game` and the tests make the arena with `Game.ARENA_SCENE.instantiate()`. All fields are set when the arena enters the tree.
 
 The arena is a 40 m by 40 m yard with outer walls, cover blocks, one raised platform with stairs and a ramp, and eight zombie spawn points near the walls. `Game` picks the spawn point that is farthest from the player of four random candidates, so zombies do not appear in view at close range.
 
@@ -279,7 +298,7 @@ Movement actions as today. Add `fire` (left mouse), `reload` (R), `melee` (V, ga
 
 - `Rules`, `RoundDirector`, and `Points` trust their inputs. `Game` is the only caller.
 - `Game` checks `Weapon.hit` targets with `is_instance_valid` because a zombie can die and free in the same tick as a second ray.
-- The navigation bake is synchronous at build time. If the bake gives an empty mesh, `Arena.build()` pushes an error. Zombies need the mesh.
+- The navigation bake is synchronous at build time. If the bake gives an empty mesh, `Arena._ready()` pushes an error. Zombies need the mesh.
 
 ## Verification plan
 
@@ -309,8 +328,8 @@ Headless tests with literal expected values:
 - `Weapon.hit` reports the final damage. A headshot already has `HEADSHOT_MULTIPLIER` in it.
 - `Weapon.reload_requested` stays set until the weapon is READY. A request during the cooldown after a shot is not lost. A semi-automatic press during the cooldown also fires when the cooldown ends.
 - `Zombie` attacks only when the target is within 1.2 m of height as well as within `ZOMBIE_ATTACK_RANGE`. Without it, a zombie under the 1.5 m platform hits the player on top. The first attack comes on the first tick in ATTACK, then one each `ZOMBIE_ATTACK_COOLDOWN`.
-- The navigation mesh uses a cell height of 0.1 m and a maximum climb of 0.2 m, and `Arena` sets the navigation map to the same cell height. With the 0.25 m default, the bake joins the 0.3 m stairs to the walkable mesh, but a zombie body cannot climb a step. Zombies use the ramp. The agent radius is 0.5 m, a whole number of 0.25 m cells, because the bake warns on a radius that is not.
-- The navigation map takes in the baked region about three physics ticks after `Arena.build()`. The first zombie spawns 3 s after the start, so the game does not wait for it. Tests wait until the map gives a path.
+- The navigation mesh uses a cell height of 0.1 m and a maximum climb of 0.2 m, and the project setting `navigation/3d/default_cell_height` is 0.1, so the navigation map has the same cell height. A project setting, not a call in `Arena`, so that a bake in the editor gives the same mesh as the game. With the 0.25 m default, the bake joins the 0.3 m stairs to the walkable mesh, but a zombie body cannot climb a step. Zombies use the ramp. The agent radius is 0.5 m, a whole number of 0.25 m cells, because the bake warns on a radius that is not.
+- The navigation map takes in the baked region about three physics ticks after `Arena._ready()`. The first zombie spawns 3 s after the start, so the game does not wait for it. Tests wait until the map gives a path.
 - `Game` has a `zombies` node that holds the zombies, so the pause and the tests reach them in one place. `Game.set_paused()` and `Game.restart()` are public, and the input handler calls them. `Game` is `PROCESS_MODE_ALWAYS` so that it reads pause and restart while the tree is paused. The arena, the player, and the zombies are `PROCESS_MODE_PAUSABLE`.
 - `Hud` has one method for each value it shows: `set_round`, `set_points`, `set_ammo`, `set_health`, `show_hit`, `show_banner`, `show_death`, and `set_paused`. Its labels and screens are public so that the game test reads what the player sees.
 - The gamepad also gets actions: right trigger fires, X reloads, and Start pauses and, after death, restarts.

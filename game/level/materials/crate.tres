@@ -1,0 +1,9 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://game/level/grid.gdshader" id="1_vsnbv"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_vsnbv")
+shader_parameter/base_color = Color(0.2, 0.26, 0.36, 1)
+shader_parameter/line_color = Color(0.08, 0.10399999, 0.144, 1)

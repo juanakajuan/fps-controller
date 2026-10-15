@@ -4,7 +4,9 @@ extends Node3D
 ## Of this many random spawn points, the zombie uses the one farthest from the player, so it does not appear in view at close range.
 const SPAWN_CANDIDATES: int = 4
 
-var arena: Arena = Arena.new()
+const ARENA_SCENE: PackedScene = preload("res://game/level/arena.tscn")
+
+var arena: Arena = ARENA_SCENE.instantiate() as Arena
 var player: Player = Player.new()
 var weapon: Weapon = Weapon.new()
 var hud: Hud = Hud.new()
@@ -23,9 +25,7 @@ func _ready() -> void:
 	_register_actions()
 	for world: Node in [arena, player, zombies]:
 		world.process_mode = Node.PROCESS_MODE_PAUSABLE
-	arena.name = "Arena"
 	add_child(arena)
-	arena.build()
 	player.name = "Player"
 	add_child(player)
 	player.teleport(arena.player_spawn.origin, arena.player_spawn.basis.get_euler().y)
