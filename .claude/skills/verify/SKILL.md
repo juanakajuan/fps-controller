@@ -9,7 +9,7 @@ The surface is one desktop game window. There is no server, no network, and no s
 
 The harness has three parts:
 
-- `run.sh` starts a private headless KWin (`kwin_wayland --virtual`, socket `zsfps-verify-<pid>`), starts Godot in it, plays one scenario, and stops both.
+- `run.sh` starts a private headless KWin (`kwin_wayland --virtual`, socket `zsfps-verify-<pid>`), starts Godot in it, plays one scenario, and stops both. KWin and Godot use a private D-Bus session (`dbus-daemon`, no auto-started services) and a private KDE config dir in `$XDG_RUNTIME_DIR/zsfps-verify-<pid>.d/`. Do not remove this isolation: on the desktop bus, the nested KWin takes `org.kde.kglobalaccel` and, when it exits, makes the desktop KWin Meta shortcuts stop until the next login.
 - `driver.gd` is a `SceneTree` script. It loads the main scene and plays the scenario lines. It sends input with `Input.parse_input_event`, so the input goes through the same `InputMap` actions and `_unhandled_input` path as a real player. It reads state from the live nodes only to log and to assert.
 - `scenarios/*.txt` are the scenario files. Each feature in `features/` names its scenario.
 
@@ -79,6 +79,7 @@ Each run writes these files to its evidence directory:
 - `transcript.log`: each step, each `STATE` line, each `PASS` or `FAIL`, each `SHOT` path.
 - `godot.log`: all Godot output, with engine errors and `SCRIPT ERROR` lines.
 - `kwin.log`: the private compositor log, for launch problems.
+- `dbus.log`: the private D-Bus log, for launch problems.
 - `<name>.png`: one file for each `shot`.
 
 `.verify/` is in `.gitignore`. Godot does not import it, because its name starts with a dot.

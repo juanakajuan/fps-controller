@@ -7,19 +7,53 @@ project="$(cd "$skill_dir/../../.." && pwd)"
 scenario="$(realpath "$1")"
 evidence="$(realpath -m "${2:-$project/.verify/$(date +%Y%m%d-%H%M%S)-$(basename "$scenario" .txt)}")"
 socket="zsfps-verify-$$"
-mkdir -p "$evidence"
+# The private KWin and Godot get their own D-Bus session and KDE config. On the desktop session bus, the nested KWin
+# fights the desktop KWin for org.kde.kglobalaccel and, when it exits, marks the desktop "kwin" shortcut component
+# inactive: all Meta shortcuts stop until the next login.
+private="$XDG_RUNTIME_DIR/$socket.d"
+mkdir -p "$evidence" "$private/config" "$private/cache"
 
+bus_pid=""
 kwin_pid=""
 godot_pid=""
 cleanup() {
 	[[ -n "$godot_pid" ]] && kill "$godot_pid" 2>/dev/null || true
 	[[ -n "$kwin_pid" ]] && kill "$kwin_pid" 2>/dev/null || true
+	wait $godot_pid $kwin_pid 2>/dev/null || true
+	[[ -n "$bus_pid" ]] && kill "$bus_pid" 2>/dev/null || true
 	wait 2>/dev/null || true
-	rm -f "$XDG_RUNTIME_DIR/$socket" "$XDG_RUNTIME_DIR/$socket.lock"
+	rm -rf "$XDG_RUNTIME_DIR/$socket" "$XDG_RUNTIME_DIR/$socket.lock" "$private"
 }
 trap cleanup EXIT INT TERM
 
-kwin_wayland --virtual --no-lockscreen --no-global-shortcuts --socket "$socket" --width 1600 --height 900 >"$evidence/kwin.log" 2>&1 &
+# No <servicedir>: nothing is auto-started on this bus, so no desktop service (portal, kglobalaccel) runs twice.
+cat >"$private/bus.conf" <<BUS
+<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <type>session</type>
+  <listen>unix:path=$private/bus</listen>
+  <auth>EXTERNAL</auth>
+  <policy context="default">
+    <allow send_destination="*" eavesdrop="true"/>
+    <allow eavesdrop="true"/>
+    <allow own="*"/>
+  </policy>
+</busconfig>
+BUS
+dbus-daemon --config-file="$private/bus.conf" --nofork --nopidfile >"$evidence/dbus.log" 2>&1 &
+bus_pid=$!
+for _ in $(seq 1 50); do
+	[[ -S "$private/bus" ]] && break
+	sleep 0.1
+done
+if [[ ! -S "$private/bus" ]]; then
+	echo "FAIL: the private D-Bus did not start. See $evidence/dbus.log"
+	exit 2
+fi
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$private/bus"
+
+XDG_CONFIG_HOME="$private/config" XDG_CACHE_HOME="$private/cache" kwin_wayland --virtual --no-lockscreen --no-global-shortcuts --socket "$socket" --width 1600 --height 900 >"$evidence/kwin.log" 2>&1 &
 kwin_pid=$!
 for _ in $(seq 1 100); do
 	[[ -S "$XDG_RUNTIME_DIR/$socket" ]] && break
