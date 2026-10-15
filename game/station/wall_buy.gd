@@ -1,3 +1,4 @@
+@tool
 class_name WallBuy
 extends Station
 ## One weapon at one price on a wall. Its origin is on the wall face, and its +Z axis points out of the wall.
@@ -16,37 +17,20 @@ const AREA_DEPTH: float = 0.3
 		weapon_def = Arsenal.find(id)
 		if weapon_def == null:
 			push_error("WallBuy: no Arsenal weapon has the id \"%s\"." % id)
-@export_range(0, 10000, 10) var price: int = 0
+		_build()
+@export_range(0, 10000, 10) var price: int = 0:
+	set(cost):
+		price = cost
+		_build()
 
 var weapon_def: WeaponDef
+## The children that _build() adds. They have no owner, so the editor does not save them in the scene.
+var _built: Array[Node] = []
 
 
+## Runs in the editor too, so the viewport shows the panel. A WallBuy has no per-frame code.
 func _ready() -> void:
-	var shape: BoxShape3D = BoxShape3D.new()
-	shape.size = Vector3(PANEL_SIZE.x, PANEL_SIZE.y, AREA_DEPTH)
-	var collision: CollisionShape3D = CollisionShape3D.new()
-	collision.shape = shape
-	collision.position = Vector3(0.0, 0.0, AREA_DEPTH * 0.5)
-	add_child(collision)
-	var panel_mesh: BoxMesh = BoxMesh.new()
-	panel_mesh.size = PANEL_SIZE
-	var panel_material: StandardMaterial3D = StandardMaterial3D.new()
-	panel_material.albedo_color = PANEL_COLOR
-	panel_material.roughness = 1.0
-	var panel: MeshInstance3D = MeshInstance3D.new()
-	panel.mesh = panel_mesh
-	panel.material_override = panel_material
-	panel.position = Vector3(0.0, 0.0, -PANEL_SIZE.z * 0.5)
-	add_child(panel)
-	add_child(_drawing())
-	var caption: Label3D = Label3D.new()
-	caption.text = "%s  %d" % [weapon_def.display_name, price]
-	caption.modulate = CHALK_COLOR
-	caption.outline_size = 0
-	caption.pixel_size = 0.004
-	caption.font_size = 48
-	caption.position = Vector3(0.0, -PANEL_SIZE.y * 0.5 + 0.12, 0.01)
-	add_child(caption)
+	_build()
 
 
 func offer(loadout: Loadout) -> Station.Offer:
@@ -66,6 +50,42 @@ func accept(chosen: Station.Offer, weapon: Weapon) -> void:
 			weapon.fill(weapon_def.id)
 
 
+## The setters call it again, so an edit of weapon_id or price in the inspector redraws the panel.
+func _build() -> void:
+	if not is_node_ready():
+		return
+	for node: Node in _built:
+		node.free()
+	_built.clear()
+	if weapon_def == null:
+		return
+	var shape: BoxShape3D = BoxShape3D.new()
+	shape.size = Vector3(PANEL_SIZE.x, PANEL_SIZE.y, AREA_DEPTH)
+	var collision: CollisionShape3D = CollisionShape3D.new()
+	collision.shape = shape
+	collision.position = Vector3(0.0, 0.0, AREA_DEPTH * 0.5)
+	_add(collision)
+	var panel_mesh: BoxMesh = BoxMesh.new()
+	panel_mesh.size = PANEL_SIZE
+	var panel_material: StandardMaterial3D = StandardMaterial3D.new()
+	panel_material.albedo_color = PANEL_COLOR
+	panel_material.roughness = 1.0
+	var panel: MeshInstance3D = MeshInstance3D.new()
+	panel.mesh = panel_mesh
+	panel.material_override = panel_material
+	panel.position = Vector3(0.0, 0.0, -PANEL_SIZE.z * 0.5)
+	_add(panel)
+	_add(_drawing())
+	var caption: Label3D = Label3D.new()
+	caption.text = "%s  %d" % [weapon_def.display_name, price]
+	caption.modulate = CHALK_COLOR
+	caption.outline_size = 0
+	caption.pixel_size = 0.004
+	caption.font_size = 48
+	caption.position = Vector3(0.0, -PANEL_SIZE.y * 0.5 + 0.12, 0.01)
+	_add(caption)
+
+
 ## The weapon parts in profile, the barrel to the left, centered on the panel.
 func _drawing() -> Node3D:
 	var bounds: AABB = AABB()
@@ -77,3 +97,8 @@ func _drawing() -> Node3D:
 	drawing.basis = Basis(Vector3.UP, PI * 0.5)
 	drawing.position = Vector3(0.0, 0.06, bounds.size.x * DRAWING_SCALE * 0.5 + 0.01) - drawing.basis * (bounds.get_center() * DRAWING_SCALE)
 	return drawing
+
+
+func _add(node: Node) -> void:
+	add_child(node)
+	_built.append(node)
