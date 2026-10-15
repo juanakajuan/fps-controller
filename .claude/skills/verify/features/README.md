@@ -5,7 +5,7 @@ This directory is the maintained source for verifying what a player can do in Zo
 ## Baseline preconditions
 
 - `.claude/skills/verify/doctor.sh` prints no `PROBLEM:` line.
-- Each run starts a new game: round 0, phase `STARTING`, 500 points, 100 health, `8 / 80` ammunition, player at `0,0,6` facing -Z.
+- Each run starts a new game: round 0, phase `STARTING`, 500 points, 100 health, the pistol (`hud_weapon == Pistol`, `slots == *Pistol`) with `8 / 80` ammunition, player at `0,0,6` facing -Z.
 - Round 1 starts 3 s after launch with 6 zombies of 150 health.
 
 ## Driving conventions
@@ -31,3 +31,4 @@ This directory is the maintained source for verifying what a player can do in Zo
 | Death and play again | [death-restart.md](death-restart.md) | `scenarios/death-restart.txt` |
 | Pause and resume | [pause.md](pause.md) | `scenarios/pause.txt` |
 | Movement: walk, sprint, slide, jump | [movement.md](movement.md) | `scenarios/movement.txt` |
+| Buys: wall buys, ammo, weapon change, box | [buys.md](buys.md) | `scenarios/buys.txt` |

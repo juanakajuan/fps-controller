@@ -1,0 +1,71 @@
+# Buys: earn points in round 1, buy the SMG at the north wall with E, change weapons with Q, earn more in round 2, then roll the box and take its weapon.
+wait_until phase == ACTIVE 10
+fight 120 head
+wait_until phase == INTERMISSION 5
+state
+expect points >= 1000
+expect hud_weapon == Pistol
+# Around the crate at -8,6, the cover block at 0,-4, and the ramp of the platform at x -7 to -2, z -12 to -8.
+walk_to -4.5 6 5
+walk_to -4.5 -6.5 5
+walk_to -1.2 -7 3
+walk_to -1.2 -17.5 5
+walk_to -8 -18 4
+face 0 0
+wait 0.4
+state
+expect hud_prompt == E  Buy SMG  1000
+shot smg-prompt
+tap E
+wait 0.2
+state
+expect slots == Pistol,*SMG
+expect hud_weapon == SMG
+expect hud_ammo == 30 / 150
+wait 0.2
+expect hud_prompt == SMG ammo full
+wait 0.5
+tap Q
+wait 0.1
+expect weapon == SWITCHING
+expect hud_weapon == Pistol
+wait 0.6
+expect weapon == READY
+expect slots == *Pistol,SMG
+shot pistol-after-q
+tap Q
+wait 0.7
+expect hud_weapon == SMG
+wait_until round == 2 15
+fight 150 head
+wait_until phase == INTERMISSION 5
+state
+expect points >= 950
+walk_to -1.2 -17.5 4
+walk_to -1.2 -7 5
+walk_to -4.5 -6.5 3
+walk_to -4.5 8.5 5
+walk_to 10 8.5 5
+walk_to 10 17.8 4
+face 180 0
+wait 0.4
+state
+expect hud_prompt == E  Mystery box  950
+shot box-prompt
+tap E
+wait 0.2
+expect box == ROLLING
+expect hud_prompt ==
+wait_until box == OFFERING 5
+# The prompt can be one tick old: Game reads the offer before the box advances in the same tick.
+wait 0.1
+state
+expect hud_prompt contains E  Take
+shot box-offer
+tap E
+wait 0.2
+state
+expect box == IDLE
+expect slots contains Pistol,*
+expect hud_weapon != SMG
+shot box-taken

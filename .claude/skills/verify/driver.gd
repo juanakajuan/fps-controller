@@ -9,6 +9,10 @@ const PHASES: PackedStringArray = ["STARTING", "ACTIVE", "INTERMISSION", "GAME_O
 const WEAPON_STATES: PackedStringArray = ["READY", "COOLDOWN", "RELOADING", "MELEE", "SWITCHING"]
 const MOVE_STATES: PackedStringArray = ["GROUND", "AIR", "SLIDE"]
 const STANCES: PackedStringArray = ["STAND", "CROUCH"]
+const BOX_PHASES: PackedStringArray = ["IDLE", "ROLLING", "OFFERING"]
+## walk_to stops this close to its target.
+const ARRIVE_DISTANCE: float = 0.3
+const BURST_TICKS: int = 12
 
 var _evidence: String = ""
 var _log: FileAccess
@@ -47,7 +51,7 @@ func _run() -> void:
 		if line.is_empty() or line.begins_with("#"):
 			continue
 		_say("STEP %d: %s" % [line_number, line])
-		var ok: bool = await _step(line.split(" ", false))
+		var ok: bool = await _step(line)
 		if not ok:
 			_fail("step %d failed: %s" % [line_number, line])
 			break
@@ -58,7 +62,8 @@ func _run() -> void:
 	quit(0 if _failures == 0 else 1)
 
 
-func _step(words: PackedStringArray) -> bool:
+func _step(line: String) -> bool:
+	var words: PackedStringArray = line.split(" ", false)
 	var command: String = words[0]
 	var rest: PackedStringArray = words.slice(1)
 	match command:
@@ -89,6 +94,11 @@ func _step(words: PackedStringArray) -> bool:
 			var aimed: bool = _aim_nearest(rest[0] if rest.size() > 0 else "body")
 			await _settle_view()
 			return aimed
+		"walk_to":
+			return await _walk_to(Vector2(float(rest[0]), float(rest[1])), float(rest[2]))
+		"face":
+			_face(deg_to_rad(float(rest[0])), deg_to_rad(float(rest[1])) if rest.size() > 1 else 0.0)
+			await _settle_view()
 		"fight":
 			await _fight(float(rest[0]), rest[1] if rest.size() > 1 else "head")
 		"shot":
@@ -96,7 +106,9 @@ func _step(words: PackedStringArray) -> bool:
 		"state":
 			_say("STATE " + JSON.stringify(_state()))
 		"expect":
-			return _expect(rest[0], rest[1], " ".join(rest.slice(2)))
+			# The value keeps its inner spaces, as in the prompt "E  Buy SMG  1000".
+			var parts: PackedStringArray = line.split(" ", false, 3)
+			return _expect(parts[1], parts[2], parts[3] if parts.size() > 3 else "")
 		"wait_until":
 			return await _wait_until(rest[0], rest[1], rest[2], float(rest[3]))
 		_:
@@ -128,6 +140,9 @@ func _state() -> Dictionary:
 		"magazine": game.weapon.current().magazine,
 		"reserve": game.weapon.current().reserve,
 		"weapon": WEAPON_STATES[game.weapon.state],
+		"weapon_name": game.weapon.current().def.display_name,
+		"slots": _slots(game.weapon.loadout),
+		"box": BOX_PHASES[game.arena.box.phase],
 		"health": snappedf(game.player.health, 0.1),
 		"player_alive": game.player.alive,
 		"move_state": MOVE_STATES[game.player.move_state],
@@ -142,6 +157,8 @@ func _state() -> Dictionary:
 		"hud_round": game.hud.round_label.text,
 		"hud_points": game.hud.points_label.text,
 		"hud_ammo": game.hud.ammo_label.text,
+		"hud_weapon": game.hud.weapon_label.text,
+		"hud_prompt": game.hud.prompt_label.text if game.hud.prompt_label.visible else "",
 		"hud_banner": game.hud.banner.text if game.hud.banner.modulate.a > 0.0 else "",
 		"hud_death": game.hud.death_screen.visible,
 		"hud_death_text": game.hud.death_text.text if game.hud.death_screen.visible else "",
@@ -249,7 +266,41 @@ func _aim_nearest(part: String) -> bool:
 	return true
 
 
-## Aims at the nearest zombie and clicks, again and again, until the time ends or the round is cleared.
+## Turns the view to a yaw and a pitch with one mouse motion. Yaw 0 faces -Z, and yaw 90 faces -X.
+func _face(yaw: float, pitch: float) -> void:
+	var player: Player = _game().player
+	var turn: float = deg_to_rad(player.mouse_sensitivity)
+	_look(Vector2(-wrapf(yaw - player.yaw, -PI, PI) / turn, -(pitch - player.pitch) / turn))
+
+
+## Holds W and steers with mouse motion until the player is within ARRIVE_DISTANCE of the point on the floor.
+func _walk_to(target: Vector2, timeout: float) -> bool:
+	var player: Player = _game().player
+	var deadline: float = Time.get_ticks_msec() / 1000.0 + timeout
+	_key(KEY_W, true)
+	var arrived: bool = false
+	while Time.get_ticks_msec() / 1000.0 < deadline:
+		var offset: Vector2 = target - Vector2(player.global_position.x, player.global_position.z)
+		if offset.length() < ARRIVE_DISTANCE:
+			arrived = true
+			break
+		_face(atan2(-offset.x, -offset.y), player.pitch)
+		await physics_frame
+	_key(KEY_W, false)
+	if not arrived:
+		_say("FAIL walk_to %.1f %.1f timed out at %.2f,%.2f" % [target.x, target.y, player.global_position.x, player.global_position.z])
+	return arrived
+
+
+func _slots(loadout: Loadout) -> String:
+	var names: PackedStringArray = []
+	for index: int in range(loadout.slots.size()):
+		names.append(("*" if index == loadout.active else "") + loadout.slots[index].def.display_name)
+	return ",".join(names)
+
+
+## Aims at the nearest zombie and holds the fire button for BURST_TICKS, again and again, until the time ends or the round is cleared.
+## A semi-automatic weapon fires once for each hold, and an automatic weapon fires a burst.
 func _fight(seconds: float, part: String) -> void:
 	var deadline: float = Time.get_ticks_msec() / 1000.0 + seconds
 	while Time.get_ticks_msec() / 1000.0 < deadline and _game().director.phase == RoundDirector.Phase.ACTIVE:
@@ -257,8 +308,8 @@ func _fight(seconds: float, part: String) -> void:
 			_aim_nearest(part)
 			await _settle_view()
 			_mouse_button(true)
-			await physics_frame
-			await physics_frame
+			for tick: int in range(BURST_TICKS):
+				await physics_frame
 			_mouse_button(false)
 		await create_timer(0.3).timeout
 

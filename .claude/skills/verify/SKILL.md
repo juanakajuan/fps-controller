@@ -51,18 +51,20 @@ One command on each line. `#` starts a comment line. The run stops at the first 
 | Command | Effect |
 |---|---|
 | `wait <seconds>` | Lets game time pass. |
-| `press <key>` / `release <key>` | Holds or releases a key. Names come from `OS.find_keycode_from_string`: `W`, `A`, `S`, `D`, `Space`, `Shift`, `Ctrl`, `C`, `R`, `V`, `Escape`, `Enter`. Held keys are released at the end. |
+| `press <key>` / `release <key>` | Holds or releases a key. Names come from `OS.find_keycode_from_string`: `W`, `A`, `S`, `D`, `Space`, `Shift`, `Ctrl`, `C`, `R`, `V`, `E`, `Q`, `Escape`, `Enter`. Held keys are released at the end. |
 | `tap <key>` | Press, two physics ticks, release. |
 | `click` / `mouse_down` / `mouse_up` | Left mouse button (the `fire` action). |
 | `look <dx> <dy>` | Mouse motion in pixels. 10 px is 1 degree. A positive `dx` turns right (yaw goes down). `look 1800 0` turns 180 degrees. |
 | `aim_nearest [body\|head]` | Sends the mouse motion that points the view at the nearest live zombie, then waits for the camera rig to apply it. Fails if no zombie is alive. |
-| `fight <seconds> [head\|body]` | Aims at the nearest zombie and clicks every 0.3 s until the time ends or the round is cleared. It uses only real mouse events. |
+| `fight <seconds> [head\|body]` | Aims at the nearest zombie and holds the fire button for 0.2 s, every 0.3 s, until the time ends or the round is cleared. A semi-automatic weapon fires once for each hold, and an automatic weapon fires a burst. It uses only real mouse events. |
+| `walk_to <x> <z> <timeout-s>` | Holds W and steers with mouse motion until the player is within 0.3 m of the point on the floor. Fails at the timeout. It does not go around obstacles, so give waypoints. |
+| `face <yaw-deg> [pitch-deg]` | Turns the view with one mouse motion. Yaw 0 faces -Z, 90 faces -X, 180 faces +Z. |
 | `shot <name>` | Saves `<name>.png` (1600x900) to the evidence directory. |
 | `state` | Logs one `STATE {json}` line with all fields below. |
-| `expect <field> <op> <value>` | Asserts a field. Ops: `==`, `!=`, `>`, `<`, `>=`, `<=`, and `contains` for text. The value is the rest of the line, so `expect hud_ammo == 8 / 80` works. |
+| `expect <field> <op> <value>` | Asserts a field. Ops: `==`, `!=`, `>`, `<`, `>=`, `<=`, and `contains` for text. The value is the rest of the line with its inner spaces, so `expect hud_ammo == 8 / 80` and `expect hud_prompt == E  Buy SMG  1000` work. |
 | `wait_until <field> <op> <value> <timeout-s>` | Waits for a field, checked each physics tick. Fails at the timeout. |
 
-State fields: `phase` (`STARTING`, `ACTIVE`, `INTERMISSION`, `GAME_OVER`), `round`, `to_spawn`, `zombies_alive`, `nearest_zombie_m` (999 when no zombie is alive), `points`, `earned`, `magazine`, `reserve`, `weapon` (`READY`, `COOLDOWN`, `RELOADING`, `MELEE`), `health`, `player_alive`, `move_state` (`GROUND`, `AIR`, `SLIDE`), `stance` (`STAND`, `CROUCH`), `speed` (horizontal m/s), `position`, `yaw_deg`, `paused`, `mouse_captured`, `fps`, `ticks_ms`, and the HUD text the player sees: `hud_round`, `hud_points`, `hud_ammo`, `hud_banner` (empty when faded), `hud_death`, `hud_death_text`, `hud_pause`.
+State fields: `phase` (`STARTING`, `ACTIVE`, `INTERMISSION`, `GAME_OVER`), `round`, `to_spawn`, `zombies_alive`, `nearest_zombie_m` (999 when no zombie is alive), `points`, `earned`, `magazine` and `reserve` (of the weapon in the hands), `weapon` (`READY`, `COOLDOWN`, `RELOADING`, `MELEE`, `SWITCHING`), `weapon_name`, `slots` (for example `Pistol,*SMG`, with `*` on the weapon in the hands), `box` (`IDLE`, `ROLLING`, `OFFERING`), `health`, `player_alive`, `move_state` (`GROUND`, `AIR`, `SLIDE`), `stance` (`STAND`, `CROUCH`), `speed` (horizontal m/s), `position`, `yaw_deg`, `paused`, `mouse_captured`, `fps`, `ticks_ms`, and the HUD text the player sees: `hud_round`, `hud_points`, `hud_ammo`, `hud_weapon`, `hud_prompt` (empty when hidden), `hud_banner` (empty when faded), `hud_death`, `hud_death_text`, `hud_pause`.
 
 To add a field or a command, edit `driver.gd`. The project treats untyped and unsafe GDScript as errors, so keep all declarations typed. Check the parse with:
 
