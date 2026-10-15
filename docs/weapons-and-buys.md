@@ -341,4 +341,14 @@ Headless tests with literal expected values:
 
 ## Accepted deviations
 
-None yet.
+- `Weapon` ends a timer when `_time_left <= TIMER_TOLERANCE` (0.0001 s), not at `<= 0.0`. The sum of thirty float deltas of 1/60 s stays a little above 0.5 s, so SWITCHING took 31 ticks. The tolerance changes no timer that is not a whole number of ticks. RELOADING (84 ticks) and MELEE (36 ticks) keep their counts.
+- `Game` does not set `weapon.loadout`. The field starts as `Loadout.new(Arsenal.pistol())`, so the game and a test that wants only the pistol need no code. A test sets it before `add_child` for other weapons.
+- `Station` is `@abstract`, and `offer()` and `accept()` are abstract functions. The parameter of `accept()` is `chosen`, because a parameter named `offer` shadows the method and the strict parse warns.
+- `WeaponDef.build_model(scale, tint)` builds the parts as meshes. The view model (1x, part colors), the wall drawing (3x, chalk), and the box display use it, so each weapon has one model. `Arsenal` holds the part colors.
+- `WeaponDef.Part` has an `_init(size, at, color)`, so each `Arsenal` function lists its parts in one expression.
+- The box area is 0.1 m larger than the crate at the sides, as designed, but it reaches 1.8 m above the floor. With an area of the crate size only, the player must look down 34 degrees to buy, and a look at the floating weapon misses the area.
+- The box display is the weapon parts at 1.5x in one flat glowing color. The part colors at 2x read as black shapes in the dark yard. In ROLLING it steps through the pool in order every 0.1 s, with no random pick, so the roll uses `rng` only once and a seeded test gives the same results.
+- Each wall buy has a chalk caption with the weapon name and the price, for example "SMG  1000", under the drawing.
+- The prompt text follows the offer kind: NONE shows the label alone ("SMG ammo full"), an offer with a cost of 0 shows "E  Take LMG", and an offer with a cost shows "E  Buy SMG  1000". A NONE prompt is gray, as the press does nothing.
+- `Weapon.fill(id)` emits `ammo_changed` only when the filled weapon is in the hands, because the HUD shows the ammunition of that weapon only.
+- `Game` reads the offer before the box advances in the same physics tick, because `Game` is the parent. The prompt of a box that changes phase is one tick old, as the boundaries allow.
