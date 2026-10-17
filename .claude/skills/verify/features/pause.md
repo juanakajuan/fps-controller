@@ -23,5 +23,5 @@ Run `.claude/skills/verify/run.sh .claude/skills/verify/scenarios/pause.txt`.
 
 ## Gotchas
 
-- Esc on the death screen does nothing. Pause works only when the game is not over.
-- The pause screen text lists only the keyboard controls.
+- Esc on the death screen does nothing. Pause works only when the game is not over. Start is bound to both pause and restart, so Start on the death screen starts a new game.
+- The pause screen text lists the keyboard and mouse controls. It lists no gamepad controls.

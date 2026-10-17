@@ -5,7 +5,7 @@ wait_until phase == INTERMISSION 5
 state
 expect points >= 1000
 expect hud_weapon == Pistol
-# Around the crate at -8,6, the cover block at 0,-4, and the ramp of the platform at x -7 to -2, z -12 to -8.
+# Around the cover blocks at -8,6 and 0,-4, and the ramp of the platform at x -7 to -2, z -12 to -8.
 walk_to -4.5 6 5
 walk_to -4.5 -6.5 5
 walk_to -1.2 -7 3

@@ -14,3 +14,5 @@ expect phase == STARTING
 expect hud_death == false
 expect points == 500
 expect health == 100
+expect earned == 0
+expect slots == *Pistol

@@ -6,7 +6,7 @@ The player starts with a semi-automatic pistol. Each press fires one round. A hi
 
 - `pistol-fire` fires one round for each press of the fire button, with a muzzle flash and recoil.
 - `pistol-hit` gives 10 points for a hit, 60 for a kill, 100 for a kill with a head hit. The hit marker is white for a hit and red for a kill.
-- `pistol-reload` reloads with R. It takes about 1.5 s. It also starts automatically when the magazine is empty.
+- `pistol-reload` reloads with R. It takes 1.4 s. R does nothing when the magazine is full. It also starts automatically when the magazine is empty.
 - `pistol-no-refill`: a new round does not fill the pistol, and no wall sells it. The knife is the fallback (see [melee.md](melee.md)).
 
 ## How to get to it (user POV)
