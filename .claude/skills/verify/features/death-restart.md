@@ -6,7 +6,7 @@ A zombie hit removes 40 health. At 0 health the game ends and shows the death sc
 
 - `damage-vignette` shows a red vignette that gets stronger as health goes down. Health comes back at 50/s after 4 s without a hit.
 - `death-screen` shows `YOU DIED`, `You survived <n> rounds.`, `You earned <n> points.`, and frees the mouse.
-- `restart` reloads the scene with Enter: round 0, 500 points, 100 health.
+- `restart` reloads the scene with Enter: round 0, 500 points, 0 earned, 100 health, and the pistol only (`slots == *Pistol`).
 
 ## How to get to it (user POV)
 
@@ -19,7 +19,7 @@ Run `.claude/skills/verify/run.sh .claude/skills/verify/scenarios/death-restart.
 
 - **Die.** `wait_until player_alive == false 180`. The player does nothing.
 - **Death screen.** `expect phase == GAME_OVER`, `expect hud_death == true`, `expect hud_death_text contains You survived 0 rounds.`, `expect mouse_captured == false`, `shot death`.
-- **Restart.** `tap Enter`, `wait 1`, then `expect phase == STARTING`, `expect hud_death == false`, `expect points == 500`, `expect health == 100`.
+- **Restart.** `tap Enter`, `wait 1`, then `expect phase == STARTING`, `expect hud_death == false`, `expect points == 500`, `expect earned == 0`, `expect health == 100`, `expect slots == *Pistol`.
 - **Vignette (not in the scenario).** `wait_until health <= 60 60`, `shot hurt`. The PNG shows a red border.
 
 ## Gotchas

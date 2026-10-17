@@ -6,7 +6,7 @@ The player walks at 7 m/s, sprints at 10.5 m/s, crouches at 3.5 m/s, slides from
 
 - `walk` with W, A, S, D.
 - `sprint` with Shift held.
-- `slide` with Ctrl or C at sprint speed (8 m/s or more). Under that speed, Ctrl or C crouches.
+- `slide` when you press Ctrl or C at 8 m/s or more (sprint speed). Shift does not have to be held. The slide stops when you release the key or the speed goes below 4 m/s. Under 8 m/s, Ctrl or C crouches.
 - `jump` with Space. The state goes `AIR`, then `GROUND` on landing.
 - `look` with mouse motion: 0.1 degree for each pixel.
 - `stairs` on the platform at -10, -10 (stairs on its +Z side, a ramp on its +X side).

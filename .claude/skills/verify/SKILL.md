@@ -109,7 +109,7 @@ Never use `pkill -f` with a pattern from this skill: the pattern also matches th
 - `run.sh` starts Godot with `--disable-vsync --max-fps 60`. With vsync, Vulkan FIFO present under the virtual KWin sometimes blocks for ever, and the run freezes at a `shot`.
 - Godot sometimes did not exit after `quit()` in a run that used restart (scene reload). `run.sh` stops Godot 15 s after `VERIFY DONE` and prints a `NOTE:` line. The result then comes from the transcript.
 - The camera rig applies a look on the next rendered frame. A shot or knife in the same tick as a large look uses the old view. `aim_nearest` and `fight` wait for this. After a raw `look`, add `wait 0.1` before `click` or `tap V`.
-- Round 1 starts 3 s after launch, and zombies spawn about 28 m away. A zombie needs 15 to 25 s to reach the player.
+- Round 1 starts 3 s after launch. Each zombie spawns at the farthest of 4 random picks from 8 spawn points, so it is 12 to 28.6 m from the player spawn (usually 28.6 m). A far zombie needs 15 to 25 s to reach the player, a near one less.
 - The player spawns at `0,0,6` and faces -Z. A cover block is 10 m ahead at z = -4. For movement tests, turn to +Z first (`look 1800 0`): that lane is clear for 14 m.
 - The headless test suite (`bash tests/run_checks.sh`) and this skill are different proofs. Run both for a gameplay change.
 

@@ -11,7 +11,7 @@ V makes a knife attack. It does 150 damage to one zombie at 2 m or less, and a w
 ## How to get to it (user POV)
 
 - Press V. Right stick press on a gamepad.
-- The pistol thrusts forward for 0.6 s.
+- The weapon in the hands thrusts forward for 0.6 s. The knife damage is the same for each weapon.
 
 ## Driving it with run.sh
 

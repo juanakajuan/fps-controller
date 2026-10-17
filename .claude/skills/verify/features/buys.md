@@ -26,7 +26,7 @@ The player starts at `0,0,6` with 500 points. Round 1 earns about 700 points wit
 Run `.claude/skills/verify/run.sh .claude/skills/verify/scenarios/buys.txt`. It takes about 2 to 3 minutes.
 
 - **Earn.** `fight 120 head` clears round 1. `expect points >= 1000`.
-- **Walk.** `walk_to` waypoints go around the crate at `-8,6`, the cover block at `0,-4`, and the ramp of the platform. `face 0 0` faces the north wall.
+- **Walk.** `walk_to` waypoints go around the cover blocks at `-8,6` and `0,-4`, and the ramp of the platform. `face 0 0` faces the north wall.
 - **Buy.** `expect hud_prompt == E  Buy SMG  1000`, `shot smg-prompt`, `tap E`, `expect slots == Pistol,*SMG`, `expect hud_ammo == 30 / 150`.
 - **Change.** `tap Q`, `expect weapon == SWITCHING`, `expect hud_weapon == Pistol`, and after 0.6 s `expect weapon == READY`.
 - **Box.** Earn in round 2, walk to `10,17.8`, `face 180 0`, `expect hud_prompt == E  Mystery box  950`, `tap E`, `wait_until box == OFFERING 5`, `wait 0.1`, `shot box-offer`, `tap E`.
